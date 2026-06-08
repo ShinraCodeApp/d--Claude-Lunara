@@ -1,0 +1,37 @@
+{
+  "name": "lunara",
+  "version": "1.0.0",
+  "description": "Lunara by ShinraCode — Women's Health Intelligence Platform",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "yarn workspace @lunara/api dev",
+    "dev:admin": "yarn workspace @lunara/admin dev",
+    "dev:mobile": "yarn workspace @lunara/mobile start",
+    "build:api": "yarn workspace @lunara/api build",
+    "build:admin": "yarn workspace @lunara/admin build",
+    "test": "yarn workspaces run test",
+    "lint": "yarn workspaces run lint",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:prod": "docker-compose -f docker-compose.prod.yml up -d",
+    "db:migrate": "yarn workspace @lunara/api prisma:migrate",
+    "db:seed": "yarn workspace @lunara/api prisma:seed"
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.5",
+    "turbo": "^1.13.3"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "yarn": ">=1.22.0"
+  },
+  "author": "ShinraCode",
+  "license": "UNLICENSED"
+}

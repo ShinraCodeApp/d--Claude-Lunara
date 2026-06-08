@@ -1,0 +1,157 @@
+version: '3.9'
+
+name: lunara-dev
+
+services:
+  # ─── PostgreSQL ───────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: lunara-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lunara_dev
+      POSTGRES_USER: lunara
+      POSTGRES_PASSWORD: lunara_dev_secret_2024
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lunara -d lunara_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis ────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: lunara-redis
+    restart: unless-stopped
+    command: redis-server --requirepass lunara_redis_secret_2024 --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "lunara_redis_secret_2024", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Backend API ──────────────────────────────────────────────
+  api:
+    build:
+      context: ./services/api
+      dockerfile: ../../docker/Dockerfile.api
+      target: development
+    container_name: lunara-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://lunara:lunara_dev_secret_2024@postgres:5432/lunara_dev
+      REDIS_URL: redis://:lunara_redis_secret_2024@redis:6379
+      JWT_ACCESS_SECRET: dev_jwt_access_secret_change_in_prod
+      JWT_REFRESH_SECRET: dev_jwt_refresh_secret_change_in_prod
+      JWT_ACCESS_EXPIRES: 15m
+      JWT_REFRESH_EXPIRES: 30d
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      REVENUECAT_API_KEY: ${REVENUECAT_API_KEY}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_S3_BUCKET: lunara-assets-dev
+      AWS_REGION: us-east-1
+      FRONTEND_URL: http://localhost:3001
+      AI_SERVICE_URL: http://ai-service:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./services/api/src:/app/src
+      - ./services/api/prisma:/app/prisma
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: yarn dev
+
+  # ─── AI Service ───────────────────────────────────────────────
+  ai-service:
+    build:
+      context: ./services/ai
+      dockerfile: ../../docker/Dockerfile.ai
+    container_name: lunara-ai
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      REDIS_URL: redis://:lunara_redis_secret_2024@redis:6379
+      API_KEY: dev_ai_service_key_change_in_prod
+      ENVIRONMENT: development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./services/ai/app:/app/app
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ─── Admin Panel ──────────────────────────────────────────────
+  admin:
+    build:
+      context: ./apps/admin
+      dockerfile: ../../docker/Dockerfile.admin
+      target: development
+    container_name: lunara-admin
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000/api/v1
+      NEXTAUTH_URL: http://localhost:3001
+      NEXTAUTH_SECRET: dev_nextauth_secret_change_in_prod
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./apps/admin/src:/app/src
+    depends_on:
+      - api
+
+  # ─── pgAdmin (Dev Only) ───────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: lunara-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@lunara.dev
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    profiles:
+      - tools
+
+  # ─── Redis Commander (Dev Only) ───────────────────────────────
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: lunara-redis-ui
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: "local:redis:6379:0:lunara_redis_secret_2024"
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: lunara-network

@@ -1,0 +1,96 @@
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.yarn/cache
+.yarn/install-state.gz
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Coverage
+coverage/
+*.lcov
+
+# TypeScript
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+.env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# React Native / Expo
+.expo/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+android/.gradle
+android/app/debug
+android/app/release
+android/app/google-services.json
+ios/Pods/
+ios/GoogleService-Info.plist
+
+# Docker
+.docker/
+
+# Certificates
+certs/
+*.pem
+*.p8
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Test
+junit.xml
+test-results/
+
+# Prisma
+prisma/dev.db
+prisma/dev.db-journal
+
+# Turbo
+.turbo/
+
+# AWS
+.aws/
+terraform.tfstate
+terraform.tfstate.backup
+.terraform/

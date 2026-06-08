@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Recurse \"d:\\\\Claude\\\\Lunara\" -File | Select-Object @{N='Path';E={$_.FullName.Replace\\('d:\\\\Claude\\\\Lunara\\\\',''\\)}} | Sort-Object Path | Format-Table -AutoSize)",
+      "Bash(New-Item -ItemType Directory -Force \"d:\\\\Claude\\\\Lunara\\\\apps\\\\mobile\\\\assets\\\\images\")",
+      "Bash(Out-Null)",
+      "Bash(New-Item -ItemType Directory -Force \"d:\\\\Claude\\\\Lunara\\\\apps\\\\mobile\\\\assets\\\\fonts\")",
+      "Bash(Write-Output \"Directorios creados\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"d:\\\\Claude\\\\Lunara\\\\apps\\\\mobile\\\\assets\\\\images\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"d:\\\\Claude\\\\Lunara\\\\apps\\\\mobile\\\\assets\\\\fonts\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"d:\\\\Claude\\\\Lunara\\\\apps\\\\mobile\\\\scripts\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"d:\\\\Claude\\\\Lunara\\\\apps\\\\mobile\\\\plugins\")",
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "PowerShell(npx --version)",
+      "PowerShell(npm install -g yarn)",
+      "PowerShell(yarn --version)",
+      "PowerShell(npm install -g eas-cli 2>&1)",
+      "PowerShell(eas --version)"
+    ]
+  }
+}

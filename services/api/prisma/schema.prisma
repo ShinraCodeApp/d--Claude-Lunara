@@ -1,0 +1,816 @@
+// ─────────────────────────────────────────────────────────────
+// Lunara by ShinraCode — Prisma Schema
+// PostgreSQL 16 + pgcrypto extension
+// ─────────────────────────────────────────────────────────────
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────
+
+enum UserRole {
+  USER
+  PREMIUM
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum SubscriptionTier {
+  FREE
+  PREMIUM_MONTHLY
+  PREMIUM_ANNUAL
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  TRIAL
+  GRACE_PERIOD
+}
+
+enum BleedingIntensity {
+  SPOTTING
+  LIGHT
+  MEDIUM
+  HEAVY
+  VERY_HEAVY
+}
+
+enum MoodType {
+  HAPPY
+  SAD
+  ANXIOUS
+  STRESSED
+  MOTIVATED
+  RELAXED
+  IRRITABLE
+  NEUTRAL
+  EMOTIONAL
+  ENERGETIC
+  TIRED
+}
+
+enum SymptomCategory {
+  PAIN
+  PHYSICAL
+  EMOTIONAL
+  DIGESTIVE
+  SKIN
+  ENERGY
+  SLEEP
+  OTHER
+}
+
+enum SymptomIntensity {
+  MILD
+  MODERATE
+  SEVERE
+}
+
+enum CyclePhase {
+  MENSTRUAL
+  FOLLICULAR
+  OVULATORY
+  LUTEAL
+}
+
+enum NotificationType {
+  PERIOD_REMINDER
+  OVULATION_REMINDER
+  DAILY_LOG
+  SYMPTOM_REMINDER
+  WELLNESS_TIP
+  ACHIEVEMENT
+  SYSTEM
+}
+
+enum GardenStage {
+  SEED
+  SPROUT
+  FLOWER
+  LUNAR_GARDEN
+}
+
+enum RewardType {
+  DAILY_LOG
+  STREAK_BONUS
+  CYCLE_COMPLETE
+  ACHIEVEMENT
+  REWARDED_VIDEO
+  CHALLENGE
+}
+
+enum PregnancyMode {
+  TRYING_TO_CONCEIVE
+  PREGNANT
+  POSTPARTUM
+  NOT_ACTIVE
+}
+
+enum ContraceptiveType {
+  NONE
+  PILL
+  IUD_COPPER
+  IUD_HORMONAL
+  CONDOM
+  IMPLANT
+  INJECTION
+  PATCH
+  RING
+  NATURAL
+  OTHER
+}
+
+// ─────────────────────────────────────────────────────────────
+// USERS & AUTH
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  emailVerified   Boolean  @default(false)
+  passwordHash    String?
+  role            UserRole @default(USER)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+  lastLoginAt     DateTime?
+
+  // Profile
+  profile         UserProfile?
+
+  // Health data
+  cycles          MenstrualCycle[]
+  symptoms        SymptomLog[]
+  moods           MoodLog[]
+  dailyLogs       DailyLog[]
+  temperatures    BasalTemperature[]
+  weights         WeightLog[]
+
+  // Predictions
+  predictions     CyclePrediction[]
+
+  // Gamification
+  garden          LunarGarden?
+  crystals        CrystalWallet?
+  achievements    UserAchievement[]
+  streaks         UserStreak?
+
+  // Social
+  partnerLinks    PartnerLink[]    @relation("PartnerOwner")
+  partnerInvites  PartnerLink[]    @relation("PartnerGuest")
+
+  // Subscriptions
+  subscription    Subscription?
+
+  // Notifications
+  notifSettings   NotificationSettings?
+  devices         UserDevice[]
+  notifications   Notification[]
+
+  // AI Chat
+  aiChats         AiChat[]
+
+  // Wellness
+  wellnessLogs    WellnessLog[]
+
+  // Auth
+  refreshTokens   RefreshToken[]
+  oauthAccounts   OAuthAccount[]
+
+  // Pregnancy
+  pregnancyProfile PregnancyProfile?
+
+  // Reports
+  reports         GeneratedReport[]
+
+  @@map("users")
+  @@index([email])
+  @@index([deletedAt])
+}
+
+model UserProfile {
+  id                String            @id @default(uuid())
+  userId            String            @unique
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  firstName         String?
+  lastName          String?
+  dateOfBirth       DateTime?
+  avatarUrl         String?
+  bio               String?
+
+  // Cycle settings
+  averageCycleLength    Int           @default(28)
+  averagePeriodLength   Int           @default(5)
+  lastPeriodDate        DateTime?
+  contraceptive         ContraceptiveType @default(NONE)
+  pregnancyMode         PregnancyMode @default(NOT_ACTIVE)
+
+  // Preferences
+  locale            String            @default("es")
+  timezone          String            @default("UTC")
+  theme             String            @default("auto")
+  useMascot         Boolean           @default(true)
+  usePartnerMode    Boolean           @default(false)
+
+  // Onboarding
+  onboardingCompleted Boolean         @default(false)
+  setupStep           Int             @default(0)
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@map("user_profiles")
+}
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token       String   @unique
+  family      String
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime @default(now())
+  userAgent   String?
+  ipAddress   String?
+
+  @@map("refresh_tokens")
+  @@index([userId])
+  @@index([token])
+  @@index([family])
+}
+
+model OAuthAccount {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider      String
+  providerUserId String
+  accessToken   String?
+  refreshToken  String?
+  expiresAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([provider, providerUserId])
+  @@map("oauth_accounts")
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// MENSTRUAL CYCLE
+// ─────────────────────────────────────────────────────────────
+
+model MenstrualCycle {
+  id              String            @id @default(uuid())
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  startDate       DateTime
+  endDate         DateTime?
+  cycleLength     Int?
+  periodLength    Int?
+
+  // Notes encrypted at application level
+  notes           String?
+
+  isConfirmed     Boolean           @default(true)
+  isPredicted     Boolean           @default(false)
+
+  // Bleeding tracking
+  bleedingDays    BleedingDay[]
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@map("menstrual_cycles")
+  @@index([userId])
+  @@index([userId, startDate])
+  @@index([startDate])
+}
+
+model BleedingDay {
+  id          String            @id @default(uuid())
+  cycleId     String
+  cycle       MenstrualCycle    @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  date        DateTime
+  intensity   BleedingIntensity
+  notes       String?
+  createdAt   DateTime          @default(now())
+
+  @@unique([cycleId, date])
+  @@map("bleeding_days")
+  @@index([cycleId])
+}
+
+model CyclePrediction {
+  id                    String   @id @default(uuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  predictedStartDate    DateTime
+  predictedEndDate      DateTime
+  confidence            Float    // 0-1
+
+  ovulationDate         DateTime?
+  fertilityWindowStart  DateTime?
+  fertilityWindowEnd    DateTime?
+
+  // Daily fertility scores (JSON array of {date, score})
+  dailyFertilityScores  Json?
+
+  algorithm             String   @default("weighted_average_v2")
+  cyclesAnalyzed        Int
+
+  createdAt             DateTime @default(now())
+  isActive              Boolean  @default(true)
+
+  @@map("cycle_predictions")
+  @@index([userId])
+  @@index([userId, isActive])
+  @@index([predictedStartDate])
+}
+
+// ─────────────────────────────────────────────────────────────
+// HEALTH TRACKING
+// ─────────────────────────────────────────────────────────────
+
+model DailyLog {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime
+
+  cyclePhase  CyclePhase?
+  energyLevel Int?      // 1-5
+  sleepHours  Float?
+  sleepQuality Int?     // 1-5
+  libido      Int?      // 1-5
+  notes       String?   // encrypted at app level
+
+  isComplete  Boolean   @default(false)
+  xpEarned    Int       @default(0)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, date])
+  @@map("daily_logs")
+  @@index([userId])
+  @@index([userId, date])
+}
+
+model SymptomLog {
+  id          String           @id @default(uuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime
+
+  symptomId   String
+  symptom     Symptom          @relation(fields: [symptomId], references: [id])
+  intensity   SymptomIntensity
+  notes       String?
+
+  createdAt   DateTime         @default(now())
+
+  @@map("symptom_logs")
+  @@index([userId])
+  @@index([userId, date])
+  @@index([symptomId])
+}
+
+model Symptom {
+  id          String          @id @default(uuid())
+  name        String
+  nameEs      String
+  category    SymptomCategory
+  icon        String
+  isDefault   Boolean         @default(true)
+
+  logs        SymptomLog[]
+
+  @@map("symptoms")
+}
+
+model MoodLog {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime
+  mood        MoodType
+  intensity   Int       // 1-5
+  notes       String?
+  createdAt   DateTime  @default(now())
+
+  @@map("mood_logs")
+  @@index([userId])
+  @@index([userId, date])
+}
+
+model BasalTemperature {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date          DateTime
+  temperature   Float     // Celsius
+  time          String?   // "07:30"
+  notes         String?
+  createdAt     DateTime  @default(now())
+
+  @@unique([userId, date])
+  @@map("basal_temperatures")
+  @@index([userId])
+}
+
+model WeightLog {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime
+  weight      Float     // kg
+  unit        String    @default("kg")
+  createdAt   DateTime  @default(now())
+
+  @@map("weight_logs")
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// GAMIFICATION — JARDÍN LUNAR
+// ─────────────────────────────────────────────────────────────
+
+model LunarGarden {
+  id              String      @id @default(uuid())
+  userId          String      @unique
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  stage           GardenStage @default(SEED)
+  xp              Int         @default(0)
+  level           Int         @default(1)
+
+  // Customization (JSON: {background, decorations[], flowers[]})
+  customization   Json        @default("{}")
+
+  // Mascot
+  mascotActive    Boolean     @default(true)
+  mascotLevel     Int         @default(1)
+  mascotAccessory String?
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@map("lunar_gardens")
+}
+
+model CrystalWallet {
+  id          String          @id @default(uuid())
+  userId      String          @unique
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance     Int             @default(0)
+  totalEarned Int             @default(0)
+  totalSpent  Int             @default(0)
+
+  transactions CrystalTransaction[]
+
+  updatedAt   DateTime        @updatedAt
+
+  @@map("crystal_wallets")
+}
+
+model CrystalTransaction {
+  id          String        @id @default(uuid())
+  walletId    String
+  wallet      CrystalWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  amount      Int
+  type        RewardType
+  description String
+  metadata    Json?
+  createdAt   DateTime      @default(now())
+
+  @@map("crystal_transactions")
+  @@index([walletId])
+}
+
+model Achievement {
+  id          String    @id @default(uuid())
+  key         String    @unique
+  nameEs      String
+  descriptionEs String
+  icon        String
+  xpReward    Int       @default(0)
+  crystalReward Int     @default(0)
+  condition   Json      // {type, threshold, ...}
+  isHidden    Boolean   @default(false)
+
+  userAchievements UserAchievement[]
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+  unlockedAt    DateTime    @default(now())
+  notified      Boolean     @default(false)
+
+  @@unique([userId, achievementId])
+  @@map("user_achievements")
+  @@index([userId])
+}
+
+model UserStreak {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentStreak   Int       @default(0)
+  longestStreak   Int       @default(0)
+  lastLogDate     DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  @@map("user_streaks")
+}
+
+// ─────────────────────────────────────────────────────────────
+// SUBSCRIPTIONS
+// ─────────────────────────────────────────────────────────────
+
+model Subscription {
+  id                  String             @id @default(uuid())
+  userId              String             @unique
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tier                SubscriptionTier   @default(FREE)
+  status              SubscriptionStatus @default(ACTIVE)
+
+  // RevenueCat
+  revenuecatCustomerId String?
+  productId           String?
+
+  currentPeriodStart  DateTime?
+  currentPeriodEnd    DateTime?
+  trialEnd            DateTime?
+
+  cancelledAt         DateTime?
+  cancelReason        String?
+
+  // Platform
+  platform            String?            // ios, android
+
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@map("subscriptions")
+  @@index([userId])
+  @@index([tier, status])
+}
+
+// ─────────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────
+
+model UserDevice {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fcmToken    String?
+  apnsToken   String?
+  platform    String    // ios, android
+  appVersion  String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, platform])
+  @@map("user_devices")
+  @@index([userId])
+}
+
+model NotificationSettings {
+  id                  String    @id @default(uuid())
+  userId              String    @unique
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  periodReminder      Boolean   @default(true)
+  periodReminderDays  Int       @default(2)
+  ovulationReminder   Boolean   @default(true)
+  dailyLogReminder    Boolean   @default(true)
+  dailyLogTime        String    @default("20:00")
+  symptomReminder     Boolean   @default(false)
+  wellnessTips        Boolean   @default(true)
+  achievements        Boolean   @default(true)
+
+  updatedAt           DateTime  @updatedAt
+
+  @@map("notification_settings")
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  title       String
+  body        String
+  data        Json?
+  isRead      Boolean          @default(false)
+  sentAt      DateTime?
+  scheduledAt DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@map("notifications")
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([scheduledAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// AI CHAT
+// ─────────────────────────────────────────────────────────────
+
+model AiChat {
+  id          String       @id @default(uuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String       @default("Nueva conversación")
+  messages    AiMessage[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@map("ai_chats")
+  @@index([userId])
+}
+
+model AiMessage {
+  id          String    @id @default(uuid())
+  chatId      String
+  chat        AiChat    @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  role        String    // user | assistant
+  content     String    // encrypted at app level
+  tokens      Int?
+  createdAt   DateTime  @default(now())
+
+  @@map("ai_messages")
+  @@index([chatId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// WELLNESS
+// ─────────────────────────────────────────────────────────────
+
+model WellnessContent {
+  id          String    @id @default(uuid())
+  type        String    // tip, meditation, recipe, exercise
+  category    String
+  titleEs     String
+  bodyEs      String
+  imageUrl    String?
+  audioUrl    String?
+  duration    Int?      // seconds
+  isPremium   Boolean   @default(false)
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@map("wellness_content")
+}
+
+model WellnessLog {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contentId   String
+  completedAt DateTime  @default(now())
+  durationSec Int?
+
+  @@map("wellness_logs")
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// PARTNER MODE
+// ─────────────────────────────────────────────────────────────
+
+model PartnerLink {
+  id          String    @id @default(uuid())
+  ownerId     String
+  owner       User      @relation("PartnerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  guestId     String?
+  guest       User?     @relation("PartnerGuest", fields: [guestId], references: [id])
+
+  inviteCode  String    @unique
+  isActive    Boolean   @default(false)
+  expiresAt   DateTime
+
+  // Permissions (JSON: {period: true, ovulation: true, mood: false, ...})
+  permissions Json      @default("{\"period\": true, \"ovulation\": true, \"mood\": false, \"symptoms\": false}")
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("partner_links")
+  @@index([ownerId])
+  @@index([guestId])
+  @@index([inviteCode])
+}
+
+// ─────────────────────────────────────────────────────────────
+// PREGNANCY MODE
+// ─────────────────────────────────────────────────────────────
+
+model PregnancyProfile {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  lastMenstrualPeriod DateTime
+  dueDate         DateTime
+  currentWeek     Int       @default(1)
+
+  weeklyLogs      PregnancyWeekLog[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("pregnancy_profiles")
+}
+
+model PregnancyWeekLog {
+  id          String           @id @default(uuid())
+  profileId   String
+  profile     PregnancyProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  week        Int
+  notes       String?
+  symptoms    Json?
+  weight      Float?
+  mood        MoodType?
+  loggedAt    DateTime         @default(now())
+
+  @@unique([profileId, week])
+  @@map("pregnancy_week_logs")
+}
+
+// ─────────────────────────────────────────────────────────────
+// REPORTS
+// ─────────────────────────────────────────────────────────────
+
+model GeneratedReport {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String    // monthly, annual, custom
+  period      String    // "2024-06", "2024", "2024-01_2024-06"
+  fileUrl     String    // S3 presigned URL
+  fileSize    Int?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  @@map("generated_reports")
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// ADMIN & CONTENT
+// ─────────────────────────────────────────────────────────────
+
+model AppConfig {
+  id          String    @id @default(uuid())
+  key         String    @unique
+  value       Json
+  description String?
+  updatedAt   DateTime  @updatedAt
+  updatedBy   String?
+
+  @@map("app_config")
+}
+
+model AuditLog {
+  id          String    @id @default(uuid())
+  userId      String?
+  action      String
+  resource    String
+  resourceId  String?
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+
+  @@map("audit_logs")
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
