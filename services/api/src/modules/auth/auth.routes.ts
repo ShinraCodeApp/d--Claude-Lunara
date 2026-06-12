@@ -33,7 +33,12 @@ export async function authRoutes(app: FastifyInstance) {
     }).parse(req.body)
 
     const result = await authService.register(body)
-    return reply.status(201).send(result)
+    return reply.status(201).send({
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+      user: result.user,
+      isNewUser: result.isNewUser,
+    })
   })
 
   // POST /auth/login
@@ -61,6 +66,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     return reply.send({
       accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
       user: result.user,
     })
   })
