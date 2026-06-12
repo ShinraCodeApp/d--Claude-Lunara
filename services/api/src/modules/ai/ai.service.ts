@@ -1,43 +1,90 @@
+import OpenAI from 'openai'
 import { prisma } from '@/config/database'
+import { redis, REDIS_KEYS } from '@/config/redis'
 import { env } from '@/config/env'
 
+const RATE_LIMIT_FREE = 20
+const RATE_LIMIT_PREMIUM = 200
+
+const LUNA_SYSTEM_PROMPT = `Eres Luna 🌙, la asistente de salud femenina de Lunara. Eres empática, cálida y científicamente precisa.
+
+Tu rol:
+- Ayudar a las usuarias a entender su ciclo menstrual, síntomas, fertilidad y bienestar hormonal
+- Responder preguntas sobre salud reproductiva, PMS, ovulación, anticoncepción, menopausia y más
+- Personalizar tus respuestas según el contexto del ciclo cuando esté disponible
+- Hablar siempre en español, con un tono cercano, profesional y libre de juicios
+- Usar emojis con moderación para hacer la conversación más cálida
+
+Restricciones importantes:
+- Nunca diagnostiques enfermedades ni prescribas medicamentos específicos
+- Recomienda consultar con un médico ante síntomas preocupantes o persistentes
+- Sé honesta cuando no tengas certeza sobre algo
+- Respuestas concisas y claras (2-4 párrafos máximo)
+- No inventes estadísticas ni información médica - cita cuando sea apropiado
+
+Cuando tengas contexto del ciclo de la usuaria, úsalo para personalizar y hacer más relevante tu respuesta.`
+
 export class AiService {
+  private openai: OpenAI | null = null
+
+  constructor() {
+    if (env.OPENAI_API_KEY) {
+      this.openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
+    }
+  }
+
   async chat(
     userId: string,
     messages: Array<{ role: string; content: string }>,
     cycleContext?: Record<string, unknown>,
     isPremium = false
   ) {
-    if (!env.AI_SERVICE_URL) {
+    if (!this.openai) {
       return {
-        content: 'El servicio de IA no está configurado aún. Estará disponible próximamente.',
-        remainingToday: isPremium ? null : 5,
+        content: 'El servicio de IA Luna no está disponible en este momento. Por favor intenta más tarde. 🌙',
+        remainingToday: isPremium ? RATE_LIMIT_PREMIUM : RATE_LIMIT_FREE,
       }
     }
 
-    try {
-      const response = await fetch(`${env.AI_SERVICE_URL}/api/v1/chat/message`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': env.AI_SERVICE_API_KEY || '',
-        },
-        body: JSON.stringify({ messages, userId, isPremium, cycleContext }),
-        signal: AbortSignal.timeout(15000),
-      })
+    // Rate limiting per user per day
+    const today = new Date().toISOString().split('T')[0]
+    const rateKey = `${REDIS_KEYS.rateLimitAi(userId)}:${today}`
+    const count = await redis.incr(rateKey)
+    if (count === 1) await redis.expire(rateKey, 86400)
 
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}))
-        throw { statusCode: response.status, message: err.detail || 'Error del servicio IA' }
-      }
+    const limit = isPremium ? RATE_LIMIT_PREMIUM : RATE_LIMIT_FREE
+    if (count > limit) {
+      throw { statusCode: 429, message: 'Límite de mensajes diarios alcanzado' }
+    }
 
-      return response.json()
-    } catch (err: any) {
-      if (err?.statusCode) throw err
-      return {
-        content: 'El servicio de IA no está disponible en este momento. Tu app seguirá funcionando con respuestas locales.',
-        remainingToday: isPremium ? null : 5,
-      }
+    // System prompt with optional cycle context
+    let systemPrompt = LUNA_SYSTEM_PROMPT
+    if (cycleContext?.user_context) {
+      systemPrompt += `\n\nContexto actual de la usuaria: ${cycleContext.user_context}`
+    }
+
+    const openaiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+      { role: 'system', content: systemPrompt },
+      ...messages.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      })),
+    ]
+
+    const completion = await this.openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: openaiMessages,
+      max_tokens: 600,
+      temperature: 0.7,
+    })
+
+    const content =
+      completion.choices[0]?.message?.content ??
+      'Lo siento, no pude procesar tu mensaje. Por favor intenta de nuevo.'
+
+    return {
+      content,
+      remainingToday: isPremium ? null : Math.max(0, limit - count),
     }
   }
 
@@ -102,6 +149,8 @@ export class AiService {
   }
 
   async analyzePatterns(userId: string) {
+    if (!this.openai) return { insights: [], available: false }
+
     const cycles = await prisma.menstrualCycle.findMany({
       where: { userId },
       orderBy: { startDate: 'desc' },
@@ -109,28 +158,43 @@ export class AiService {
       include: { bleedingDays: true },
     })
 
-    if (!env.AI_SERVICE_URL) return { insights: [], available: false }
+    if (cycles.length < 2) return { insights: [], available: true }
+
+    const avgLength =
+      cycles.slice(0, -1).reduce((sum, c, i) => {
+        const next = cycles[i + 1]
+        const diff = Math.round(
+          (new Date(c.startDate).getTime() - new Date(next.startDate).getTime()) / 86400000
+        )
+        return sum + diff
+      }, 0) / (cycles.length - 1)
+
+    const prompt = `Analiza estos datos del ciclo menstrual y proporciona 3 insights personalizados en español. Sé concisa y práctica.
+Ciclos recientes: ${cycles.length} ciclos registrados.
+Duración promedio del ciclo: ${Math.round(avgLength)} días.
+Responde SOLO con un JSON array de strings, ejemplo: ["Insight 1", "Insight 2", "Insight 3"]`
 
     try {
-      const response = await fetch(`${env.AI_SERVICE_URL}/api/v1/chat/analyze-patterns`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': env.AI_SERVICE_API_KEY || '',
-        },
-        body: JSON.stringify({ userId, cycles }),
-        signal: AbortSignal.timeout(15000),
+      const completion = await this.openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 300,
+        temperature: 0.5,
+        response_format: { type: 'json_object' },
       })
 
-      if (!response.ok) throw { statusCode: 502, message: 'Error analizando patrones' }
-      return response.json()
-    } catch (err: any) {
-      if (err?.statusCode) throw err
-      return { insights: [], available: false }
+      const raw = completion.choices[0]?.message?.content ?? '{}'
+      const parsed = JSON.parse(raw)
+      const insights: string[] = Array.isArray(parsed.insights) ? parsed.insights : []
+      return { insights, available: true }
+    } catch {
+      return { insights: [], available: true }
     }
   }
 
   async generateMonthlyInsight(userId: string, year: number, month: number) {
+    if (!this.openai) return { insight: null, available: false }
+
     const startDate = new Date(year, month - 1, 1)
     const endDate = new Date(year, month, 0)
 
@@ -146,34 +210,26 @@ export class AiService {
       prisma.userStreak.findUnique({ where: { userId } }),
     ])
 
-    const monthlyData = {
-      cycles,
-      symptomLogs: symptoms,
-      dominantMood: this.getDominantMood(moods.map((m) => m.mood)),
-      currentStreak: streak?.currentStreak ?? 0,
-      longestStreak: streak?.longestStreak ?? 0,
-      year,
-      month,
-    }
-
-    if (!env.AI_SERVICE_URL) return { insight: null, available: false }
+    const dominantMood = this.getDominantMood(moods.map((m) => m.mood))
+    const prompt = `Genera un insight mensual de salud femenina en español para una usuaria con los siguientes datos:
+- Mes: ${year}-${month}
+- Ciclos registrados: ${cycles.length}
+- Registros de síntomas: ${symptoms}
+- Estado de ánimo predominante: ${dominantMood ?? 'no registrado'}
+- Racha actual: ${streak?.currentStreak ?? 0} días
+Sé alentadora, específica y útil. Máximo 3 oraciones.`
 
     try {
-      const response = await fetch(`${env.AI_SERVICE_URL}/api/v1/chat/monthly-insight`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': env.AI_SERVICE_API_KEY || '',
-        },
-        body: JSON.stringify(monthlyData),
-        signal: AbortSignal.timeout(15000),
+      const completion = await this.openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 200,
+        temperature: 0.7,
       })
-
-      if (!response.ok) throw { statusCode: 502, message: 'Error generando insight' }
-      return response.json()
-    } catch (err: any) {
-      if (err?.statusCode) throw err
-      return { insight: null, available: false }
+      const insight = completion.choices[0]?.message?.content ?? null
+      return { insight, available: true }
+    } catch {
+      return { insight: null, available: true }
     }
   }
 
