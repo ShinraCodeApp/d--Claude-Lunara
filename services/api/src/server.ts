@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import Fastify from 'fastify'
 import * as Sentry from '@sentry/node'
 import { env } from '@/config/env'
@@ -17,7 +18,7 @@ const app = Fastify({
   } : logger,
   trustProxy: true,
   requestIdLogLabel: 'requestId',
-  genReqId: () => crypto.randomUUID(),
+  genReqId: () => randomUUID(),
 })
 
 async function bootstrap() {
