@@ -29,18 +29,47 @@ export class GardenService {
     const newXP = garden.xp + amount
     const newStage = this.calculateStage(newXP)
     const newLevel = Math.floor(newXP / 50) + 1
+    const stageChanged = newStage !== garden.stage
 
     await prisma.lunarGarden.update({
       where: { userId },
-      data: {
-        xp: newXP,
-        stage: newStage,
-        level: newLevel,
-      },
+      data: { xp: newXP, stage: newStage, level: newLevel },
     })
 
-    // Check achievements after XP award
+    if (stageChanged) {
+      await this.unlockGardenStageAchievement(userId, newStage)
+    }
+
     await this.checkAchievements(userId, reason)
+  }
+
+  private async unlockGardenStageAchievement(userId: string, stage: string): Promise<void> {
+    const keyMap: Record<string, string> = {
+      SPROUT: 'garden_sprout',
+      FLOWER: 'garden_flower',
+      LUNAR_GARDEN: 'garden_lunar',
+    }
+    const key = keyMap[stage]
+    if (!key) return
+
+    const achievement = await prisma.achievement.findUnique({ where: { key } })
+    if (!achievement) return
+
+    const already = await prisma.userAchievement.findUnique({
+      where: { userId_achievementId: { userId, achievementId: achievement.id } },
+    })
+    if (already) return
+
+    await prisma.userAchievement.create({ data: { userId, achievementId: achievement.id } })
+    if (achievement.crystalReward > 0) {
+      await this.awardCrystals(userId, achievement.crystalReward, 'ACHIEVEMENT', achievement.nameEs)
+    }
+    if (achievement.xpReward > 0) {
+      await prisma.lunarGarden.update({
+        where: { userId },
+        data: { xp: { increment: achievement.xpReward } },
+      })
+    }
   }
 
   async awardCrystals(userId: string, amount: number, type: string, description: string): Promise<void> {

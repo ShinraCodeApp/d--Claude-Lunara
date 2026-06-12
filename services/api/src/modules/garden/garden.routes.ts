@@ -32,24 +32,54 @@ export async function gardenRoutes(app: FastifyInstance) {
     return reply.send({ crystalsEarned: 15, message: '¡Cristales ganados!' })
   })
 
-  // POST /garden/customize — update garden customization
+  // POST /garden/spend — spend crystals on items
+  app.post('/spend', async (req, reply) => {
+    const body = z.object({
+      amount: z.number().int().positive(),
+      description: z.string(),
+    }).parse(req.body)
+
+    const success = await gardenService.spendCrystals(
+      req.currentUser.id,
+      body.amount,
+      body.description
+    )
+
+    if (!success) {
+      return reply.status(400).send({ error: 'Cristales insuficientes' })
+    }
+
+    return reply.send({ success: true, message: '¡Cristales gastados!' })
+  })
+
+  // POST /garden/customize — update garden customization (costs crystals)
   app.post('/customize', async (req, reply) => {
     const body = z.object({
       background: z.string().optional(),
       decorations: z.array(z.string()).optional(),
       mascotAccessory: z.string().optional(),
+      crystalCost: z.number().int().min(0).default(0),
     }).parse(req.body)
 
-    // TODO: Verify user has the items (crystal balance check)
-    const updated = await import('@/config/database').then(({ prisma }) =>
-      prisma.lunarGarden.update({
-        where: { userId: req.currentUser.id },
-        data: {
-          customization: body,
-          mascotAccessory: body.mascotAccessory,
-        },
-      })
-    )
+    if (body.crystalCost > 0) {
+      const success = await gardenService.spendCrystals(
+        req.currentUser.id,
+        body.crystalCost,
+        'Personalización del jardín'
+      )
+      if (!success) {
+        return reply.status(400).send({ error: 'Cristales insuficientes' })
+      }
+    }
+
+    const { prisma } = await import('@/config/database')
+    const updated = await prisma.lunarGarden.update({
+      where: { userId: req.currentUser.id },
+      data: {
+        customization: { background: body.background, decorations: body.decorations },
+        mascotAccessory: body.mascotAccessory,
+      },
+    })
 
     return reply.send(updated)
   })
