@@ -41,6 +41,7 @@
     "firebase-admin": "^12.2.0",
     "google-auth-library": "^9.11.0",
     "ioredis": "^5.3.2",
+    "jsonwebtoken": "^9.0.3",
     "node-apn": "^3.0.0",
     "openai": "^4.52.0",
     "pdfkit": "^0.15.0",
@@ -53,6 +54,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^20.14.9",
     "@types/pdfkit": "^0.13.4",
     "@types/uuid": "^10.0.0",

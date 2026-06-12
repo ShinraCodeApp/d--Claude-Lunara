@@ -1,5 +1,6 @@
 import { FastifyRequest } from 'fastify'
 import { OAuth2Client } from 'google-auth-library'
+import jwt from 'jsonwebtoken'
 import { prisma } from '@/config/database'
 import { redis, REDIS_KEYS } from '@/config/redis'
 import { env } from '@/config/env'
@@ -286,9 +287,11 @@ export class AuthService {
   }
 
   private signToken(userId: string, jti: string): string {
-    // Fastify JWT sign (called from route context in real impl)
-    // This is a placeholder — actual signing happens via fastify.jwt.sign
-    return `${userId}.${jti}.placeholder`
+    return jwt.sign(
+      { sub: userId, jti },
+      env.JWT_ACCESS_SECRET,
+      { expiresIn: env.JWT_ACCESS_EXPIRES as jwt.SignOptions['expiresIn'] }
+    )
   }
 
   sanitizeUser(user: {
