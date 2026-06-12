@@ -1,10 +1,14 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import { prisma } from '@/config/database'
 import { redis, REDIS_KEYS } from '@/config/redis'
 import { env } from '@/config/env'
 
 const RATE_LIMIT_FREE = 20
 const RATE_LIMIT_PREMIUM = 200
+
+// Use v1 REST API directly — the @google/generative-ai SDK uses v1beta which has deprecated model names
+const GEMINI_MODEL = 'gemini-2.0-flash'
+const GEMINI_URL = (model: string) =>
+  `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`
 
 const LUNA_SYSTEM_PROMPT = `Eres Luna 🌙, la asistente de salud femenina de Lunara. Eres empática, cálida y científicamente precisa.
 
@@ -23,21 +27,13 @@ Restricciones importantes:
 - No inventes estadísticas ni información médica`
 
 export class AiService {
-  private genAI: GoogleGenerativeAI | null = null
-
-  constructor() {
-    if (env.GEMINI_API_KEY) {
-      this.genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY)
-    }
-  }
-
   async chat(
     userId: string,
     messages: Array<{ role: string; content: string }>,
     cycleContext?: Record<string, unknown>,
     isPremium = false
   ) {
-    if (!this.genAI) {
+    if (!env.GEMINI_API_KEY) {
       return {
         content: 'El servicio de IA Luna no está disponible en este momento. Por favor intenta más tarde. 🌙',
         remainingToday: isPremium ? RATE_LIMIT_PREMIUM : RATE_LIMIT_FREE,
@@ -55,45 +51,52 @@ export class AiService {
       throw { statusCode: 429, message: 'Límite de mensajes diarios alcanzado' }
     }
 
-    // System prompt with optional cycle context
     let systemPrompt = LUNA_SYSTEM_PROMPT
     if (cycleContext?.user_context) {
       systemPrompt += `\n\nContexto actual de la usuaria: ${cycleContext.user_context}`
     }
 
-    const lastMessage = messages[messages.length - 1]?.content ?? ''
-
-    // Gemini uses 'user'/'model' roles and history must start with 'user'
-    const rawHistory = messages.slice(0, -1).map((m) => ({
+    // Build contents array — Gemini v1 REST format
+    // History must start with 'user' role
+    const allMsgs = messages.map((m) => ({
       role: m.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: m.content }],
     }))
-    const firstUserIdx = rawHistory.findIndex((m) => m.role === 'user')
-    const history = firstUserIdx >= 0 ? rawHistory.slice(firstUserIdx) : []
-
-    const model = this.genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
-      systemInstruction: systemPrompt,
-    })
+    const firstUserIdx = allMsgs.findIndex((m) => m.role === 'user')
+    const contents = firstUserIdx >= 0 ? allMsgs.slice(firstUserIdx) : allMsgs
 
     try {
-      const chat = model.startChat({
-        history,
-        generationConfig: { maxOutputTokens: 600, temperature: 0.7 },
+      const res = await fetch(GEMINI_URL(GEMINI_MODEL), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents,
+          generationConfig: { maxOutputTokens: 600, temperature: 0.7 },
+        }),
       })
 
-      const result = await chat.sendMessage(lastMessage)
-      const content = result.response.text() || 'Lo siento, no pude procesar tu mensaje. Intenta de nuevo.'
+      if (!res.ok) {
+        const errText = await res.text()
+        console.error('Gemini HTTP error:', res.status, errText)
+        return {
+          content: 'Lo siento, hubo un problema al procesar tu mensaje. Por favor intenta de nuevo. 🌙',
+          remainingToday: isPremium ? null : Math.max(0, limit - count),
+        }
+      }
+
+      const data = await res.json() as any
+      const content: string = data?.candidates?.[0]?.content?.parts?.[0]?.text
+        ?? 'Lo siento, no pude procesar tu mensaje. Intenta de nuevo.'
 
       return {
         content,
         remainingToday: isPremium ? null : Math.max(0, limit - count),
       }
     } catch (err: any) {
-      const errMsg = err?.message ?? String(err)
-      console.error('Gemini error:', errMsg)
+      console.error('Gemini error:', err?.message ?? err)
       return {
-        content: `[DEBUG] ${errMsg}`,
+        content: 'Lo siento, hubo un problema al procesar tu mensaje. Por favor intenta de nuevo. 🌙',
         remainingToday: isPremium ? null : Math.max(0, limit - count),
       }
     }
@@ -157,7 +160,7 @@ export class AiService {
   }
 
   async analyzePatterns(userId: string) {
-    if (!this.genAI) return { insights: [], available: false }
+    if (!env.GEMINI_API_KEY) return { insights: [], available: false }
 
     const cycles = await prisma.menstrualCycle.findMany({
       where: { userId },
@@ -175,13 +178,17 @@ export class AiService {
         return sum + diff
       }, 0) / (cycles.length - 1)
 
-    const model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
     const prompt = `Analiza estos datos del ciclo menstrual y da 3 insights cortos en español (una oración cada uno). Responde SOLO como JSON: {"insights": ["...", "...", "..."]}
 Datos: ${cycles.length} ciclos, duración promedio ${Math.round(avgLength)} días.`
 
     try {
-      const result = await model.generateContent(prompt)
-      const raw = result.response.text()
+      const res = await fetch(GEMINI_URL(GEMINI_MODEL), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] }),
+      })
+      const data = await res.json() as any
+      const raw: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
       const match = raw.match(/\{[\s\S]*\}/)
       if (match) {
         const parsed = JSON.parse(match[0])
@@ -194,7 +201,7 @@ Datos: ${cycles.length} ciclos, duración promedio ${Math.round(avgLength)} día
   }
 
   async generateMonthlyInsight(userId: string, year: number, month: number) {
-    if (!this.genAI) return { insight: null, available: false }
+    if (!env.GEMINI_API_KEY) return { insight: null, available: false }
 
     const startDate = new Date(year, month - 1, 1)
     const endDate = new Date(year, month, 0)
@@ -207,13 +214,18 @@ Datos: ${cycles.length} ciclos, duración promedio ${Math.round(avgLength)} día
     ])
 
     const dominantMood = this.getDominantMood(moods.map((m) => m.mood))
-    const model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
     const prompt = `Genera un insight mensual de salud femenina en español. Sé alentadora y específica. Máximo 3 oraciones.
 Datos: ${year}-${month}, ${cycles.length} ciclos, ${symptoms} registros de síntomas, ánimo predominante: ${dominantMood ?? 'no registrado'}, racha: ${streak?.currentStreak ?? 0} días.`
 
     try {
-      const result = await model.generateContent(prompt)
-      return { insight: result.response.text(), available: true }
+      const res = await fetch(GEMINI_URL(GEMINI_MODEL), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] }),
+      })
+      const data = await res.json() as any
+      const insight: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+      return { insight: insight || null, available: true }
     } catch {
       return { insight: null, available: true }
     }
