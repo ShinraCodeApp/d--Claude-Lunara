@@ -1,5 +1,6 @@
 import { prisma } from '@/config/database'
 import { env } from '@/config/env'
+import { SubscriptionTier, SubscriptionStatus } from '@prisma/client'
 
 export class SubscriptionService {
   async getStatus(userId: string) {
@@ -36,9 +37,9 @@ export class SubscriptionService {
 
     if (!user) return
 
-    const tierMap: Record<string, string> = {
-      'lunara.premium.monthly': 'PREMIUM_MONTHLY',
-      'lunara.premium.annual': 'PREMIUM_ANNUAL',
+    const tierMap: Record<string, SubscriptionTier> = {
+      'lunara.premium.monthly': SubscriptionTier.PREMIUM_MONTHLY,
+      'lunara.premium.annual': SubscriptionTier.PREMIUM_ANNUAL,
     }
 
     switch (eventType) {
@@ -47,16 +48,16 @@ export class SubscriptionService {
         await prisma.subscription.upsert({
           where: { userId: user.id },
           update: {
-            tier: tierMap[productId] ?? 'PREMIUM_MONTHLY',
-            status: 'ACTIVE',
+            tier: tierMap[productId] ?? SubscriptionTier.PREMIUM_MONTHLY,
+            status: SubscriptionStatus.ACTIVE,
             productId,
             currentPeriodStart: new Date(event.purchased_at_ms as number),
             currentPeriodEnd: new Date(event.expiration_at_ms as number),
           },
           create: {
             userId: user.id,
-            tier: tierMap[productId] ?? 'PREMIUM_MONTHLY',
-            status: 'ACTIVE',
+            tier: tierMap[productId] ?? SubscriptionTier.PREMIUM_MONTHLY,
+            status: SubscriptionStatus.ACTIVE,
             productId,
             revenuecatCustomerId: appUserId,
             currentPeriodStart: new Date(event.purchased_at_ms as number),
@@ -74,14 +75,14 @@ export class SubscriptionService {
       case 'CANCELLATION':
         await prisma.subscription.update({
           where: { userId: user.id },
-          data: { status: 'CANCELLED', cancelledAt: new Date() },
+          data: { status: SubscriptionStatus.CANCELLED, cancelledAt: new Date() },
         })
         break
 
       case 'EXPIRATION':
         await prisma.subscription.update({
           where: { userId: user.id },
-          data: { status: 'EXPIRED', tier: 'FREE' },
+          data: { status: SubscriptionStatus.EXPIRED, tier: SubscriptionTier.FREE },
         })
         await prisma.user.update({
           where: { id: user.id },
@@ -93,14 +94,14 @@ export class SubscriptionService {
         await prisma.subscription.upsert({
           where: { userId: user.id },
           update: {
-            status: 'TRIAL',
-            tier: tierMap[productId] ?? 'PREMIUM_MONTHLY',
+            status: SubscriptionStatus.TRIAL,
+            tier: tierMap[productId] ?? SubscriptionTier.PREMIUM_MONTHLY,
             trialEnd: new Date(event.expiration_at_ms as number),
           },
           create: {
             userId: user.id,
-            status: 'TRIAL',
-            tier: tierMap[productId] ?? 'PREMIUM_MONTHLY',
+            status: SubscriptionStatus.TRIAL,
+            tier: tierMap[productId] ?? SubscriptionTier.PREMIUM_MONTHLY,
             revenuecatCustomerId: appUserId,
             trialEnd: new Date(event.expiration_at_ms as number),
           },
@@ -134,8 +135,8 @@ export class SubscriptionService {
 
       await prisma.subscription.upsert({
         where: { userId },
-        update: { tier, status: 'ACTIVE', revenuecatCustomerId: data.revenuecatUserId },
-        create: { userId, tier, status: 'ACTIVE', revenuecatCustomerId: data.revenuecatUserId },
+        update: { tier: tier as SubscriptionTier, status: SubscriptionStatus.ACTIVE, revenuecatCustomerId: data.revenuecatUserId },
+        create: { userId, tier: tier as SubscriptionTier, status: SubscriptionStatus.ACTIVE, revenuecatCustomerId: data.revenuecatUserId },
       })
 
       return { restored: true, tier, message: 'Compras restauradas correctamente' }

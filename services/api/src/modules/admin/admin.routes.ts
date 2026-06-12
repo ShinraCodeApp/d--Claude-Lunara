@@ -5,7 +5,8 @@ import { prisma } from '@/config/database'
 import dayjs from 'dayjs'
 
 export async function adminRoutes(app: FastifyInstance) {
-  app.addHook('preHandler', [authenticate, requireAdmin])
+  app.addHook('preHandler', authenticate)
+  app.addHook('preHandler', requireAdmin)
 
   // GET /admin/stats — dashboard KPIs
   app.get('/stats', async (_req, reply) => {

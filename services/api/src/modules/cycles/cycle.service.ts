@@ -1,5 +1,8 @@
 import dayjs from 'dayjs'
+import isBetween from 'dayjs/plugin/isBetween'
 import { prisma } from '@/config/database'
+
+dayjs.extend(isBetween)
 import { redis, REDIS_KEYS } from '@/config/redis'
 import { PredictionEngine } from '../predictions/prediction.engine'
 import { GardenService } from '../garden/garden.service'
@@ -267,7 +270,7 @@ export class CycleService {
         fertilityWindowEnd: prediction.fertilityWindowEnd,
         confidence: prediction.confidence,
         cyclesAnalyzed: prediction.cyclesAnalyzed,
-        dailyFertilityScores: prediction.dailyFertilityScores,
+        dailyFertilityScores: prediction.dailyFertilityScores as never,
         algorithm: 'weighted_average_v2',
       },
     })

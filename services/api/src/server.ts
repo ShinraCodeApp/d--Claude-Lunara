@@ -1,5 +1,4 @@
 import Fastify from 'fastify'
-import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
 import * as Sentry from '@sentry/node'
 import { env } from '@/config/env'
 import { registerPlugins } from '@/plugins'
@@ -19,7 +18,7 @@ const app = Fastify({
   trustProxy: true,
   requestIdLogLabel: 'requestId',
   genReqId: () => crypto.randomUUID(),
-}).withTypeProvider<TypeBoxTypeProvider>()
+})
 
 async function bootstrap() {
   try {

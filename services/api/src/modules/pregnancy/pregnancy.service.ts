@@ -3,14 +3,12 @@ import { prisma } from '@/config/database'
 interface UpsertProfileInput {
   lastMenstrualPeriod: Date
   dueDate?: Date
-  isHighRisk: boolean
 }
 
 interface WeekLogInput {
-  weekNumber: number
+  week: number
   weight?: number
   symptoms?: string[]
-  babyMovements?: boolean
   notes?: string
 }
 
@@ -39,13 +37,11 @@ export class PregnancyService {
         userId,
         lastMenstrualPeriod: input.lastMenstrualPeriod,
         dueDate,
-        isHighRisk: input.isHighRisk,
         currentWeek: gestationalAge,
       },
       update: {
         lastMenstrualPeriod: input.lastMenstrualPeriod,
         dueDate,
-        isHighRisk: input.isHighRisk,
         currentWeek: gestationalAge,
       },
     })
@@ -67,7 +63,7 @@ export class PregnancyService {
     return prisma.pregnancyWeekLog.create({
       data: {
         profileId: profile.id,
-        weekNumber: input.weekNumber,
+        week: input.week,
         weight: input.weight,
         notes: input.notes,
       },
@@ -79,7 +75,7 @@ export class PregnancyService {
     if (!profile) return []
     return prisma.pregnancyWeekLog.findMany({
       where: { profileId: profile.id },
-      orderBy: { weekNumber: 'asc' },
+      orderBy: { week: 'asc' },
     })
   }
 
