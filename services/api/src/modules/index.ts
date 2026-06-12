@@ -17,6 +17,12 @@ import { partnerRoutes } from './partner/partner.routes'
 const API_PREFIX = '/api/v1'
 
 export async function registerRoutes(app: FastifyInstance) {
+  app.get(`${API_PREFIX}/health`, async () => ({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+  }))
+
   await app.register(authRoutes, { prefix: `${API_PREFIX}/auth` })
   await app.register(userRoutes, { prefix: `${API_PREFIX}/users` })
   await app.register(cycleRoutes, { prefix: `${API_PREFIX}/cycles` })

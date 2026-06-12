@@ -8,21 +8,37 @@ export class AiService {
     cycleContext?: Record<string, unknown>,
     isPremium = false
   ) {
-    const response = await fetch(`${env.AI_SERVICE_URL}/api/v1/chat/message`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': env.AI_SERVICE_API_KEY || '',
-      },
-      body: JSON.stringify({ messages, userId, isPremium, cycleContext }),
-    })
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}))
-      throw { statusCode: response.status, message: err.detail || 'Error del servicio IA' }
+    if (!env.AI_SERVICE_URL) {
+      return {
+        content: 'El servicio de IA no está configurado aún. Estará disponible próximamente.',
+        remainingToday: isPremium ? null : 5,
+      }
     }
 
-    return response.json()
+    try {
+      const response = await fetch(`${env.AI_SERVICE_URL}/api/v1/chat/message`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': env.AI_SERVICE_API_KEY || '',
+        },
+        body: JSON.stringify({ messages, userId, isPremium, cycleContext }),
+        signal: AbortSignal.timeout(15000),
+      })
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        throw { statusCode: response.status, message: err.detail || 'Error del servicio IA' }
+      }
+
+      return response.json()
+    } catch (err: any) {
+      if (err?.statusCode) throw err
+      return {
+        content: 'El servicio de IA no está disponible en este momento. Tu app seguirá funcionando con respuestas locales.',
+        remainingToday: isPremium ? null : 5,
+      }
+    }
   }
 
   async saveChatMessage(
@@ -93,17 +109,25 @@ export class AiService {
       include: { bleedingDays: true },
     })
 
-    const response = await fetch(`${env.AI_SERVICE_URL}/api/v1/chat/analyze-patterns`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': env.AI_SERVICE_API_KEY || '',
-      },
-      body: JSON.stringify({ userId, cycles }),
-    })
+    if (!env.AI_SERVICE_URL) return { insights: [], available: false }
 
-    if (!response.ok) throw { statusCode: 502, message: 'Error analizando patrones' }
-    return response.json()
+    try {
+      const response = await fetch(`${env.AI_SERVICE_URL}/api/v1/chat/analyze-patterns`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': env.AI_SERVICE_API_KEY || '',
+        },
+        body: JSON.stringify({ userId, cycles }),
+        signal: AbortSignal.timeout(15000),
+      })
+
+      if (!response.ok) throw { statusCode: 502, message: 'Error analizando patrones' }
+      return response.json()
+    } catch (err: any) {
+      if (err?.statusCode) throw err
+      return { insights: [], available: false }
+    }
   }
 
   async generateMonthlyInsight(userId: string, year: number, month: number) {
@@ -132,17 +156,25 @@ export class AiService {
       month,
     }
 
-    const response = await fetch(`${env.AI_SERVICE_URL}/api/v1/chat/monthly-insight`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': env.AI_SERVICE_API_KEY || '',
-      },
-      body: JSON.stringify(monthlyData),
-    })
+    if (!env.AI_SERVICE_URL) return { insight: null, available: false }
 
-    if (!response.ok) throw { statusCode: 502, message: 'Error generando insight' }
-    return response.json()
+    try {
+      const response = await fetch(`${env.AI_SERVICE_URL}/api/v1/chat/monthly-insight`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': env.AI_SERVICE_API_KEY || '',
+        },
+        body: JSON.stringify(monthlyData),
+        signal: AbortSignal.timeout(15000),
+      })
+
+      if (!response.ok) throw { statusCode: 502, message: 'Error generando insight' }
+      return response.json()
+    } catch (err: any) {
+      if (err?.statusCode) throw err
+      return { insight: null, available: false }
+    }
   }
 
   private getDominantMood(moods: string[]): string | null {
