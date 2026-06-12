@@ -61,30 +61,40 @@ export class AiService {
       systemPrompt += `\n\nContexto actual de la usuaria: ${cycleContext.user_context}`
     }
 
-    // Gemini uses 'user'/'model' roles (not 'assistant')
-    const history = messages.slice(0, -1).map((m) => ({
+    const lastMessage = messages[messages.length - 1]?.content ?? ''
+
+    // Gemini uses 'user'/'model' roles and history must start with 'user'
+    const rawHistory = messages.slice(0, -1).map((m) => ({
       role: m.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: m.content }],
     }))
-
-    const lastMessage = messages[messages.length - 1]?.content ?? ''
+    const firstUserIdx = rawHistory.findIndex((m) => m.role === 'user')
+    const history = firstUserIdx >= 0 ? rawHistory.slice(firstUserIdx) : []
 
     const model = this.genAI.getGenerativeModel({
       model: 'gemini-1.5-flash',
       systemInstruction: systemPrompt,
     })
 
-    const chat = model.startChat({
-      history,
-      generationConfig: { maxOutputTokens: 600, temperature: 0.7 },
-    })
+    try {
+      const chat = model.startChat({
+        history,
+        generationConfig: { maxOutputTokens: 600, temperature: 0.7 },
+      })
 
-    const result = await chat.sendMessage(lastMessage)
-    const content = result.response.text() || 'Lo siento, no pude procesar tu mensaje. Intenta de nuevo.'
+      const result = await chat.sendMessage(lastMessage)
+      const content = result.response.text() || 'Lo siento, no pude procesar tu mensaje. Intenta de nuevo.'
 
-    return {
-      content,
-      remainingToday: isPremium ? null : Math.max(0, limit - count),
+      return {
+        content,
+        remainingToday: isPremium ? null : Math.max(0, limit - count),
+      }
+    } catch (err: any) {
+      console.error('Gemini error:', err?.message ?? err)
+      return {
+        content: 'Lo siento, hubo un problema al procesar tu mensaje. Por favor intenta de nuevo. 🌙',
+        remainingToday: isPremium ? null : Math.max(0, limit - count),
+      }
     }
   }
 
