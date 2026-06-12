@@ -1,4 +1,4 @@
-import OpenAI from 'openai'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 import { prisma } from '@/config/database'
 import { redis, REDIS_KEYS } from '@/config/redis'
 import { env } from '@/config/env'
@@ -20,16 +20,15 @@ Restricciones importantes:
 - Recomienda consultar con un médico ante síntomas preocupantes o persistentes
 - Sé honesta cuando no tengas certeza sobre algo
 - Respuestas concisas y claras (2-4 párrafos máximo)
-- No inventes estadísticas ni información médica - cita cuando sea apropiado
-
-Cuando tengas contexto del ciclo de la usuaria, úsalo para personalizar y hacer más relevante tu respuesta.`
+- No inventes estadísticas ni información médica`
 
 export class AiService {
-  private openai: OpenAI | null = null
+  private genAI: GoogleGenerativeAI | null = null
 
   constructor() {
-    if (env.OPENAI_API_KEY) {
-      this.openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
+    const key = env.GEMINI_API_KEY || env.OPENAI_API_KEY
+    if (env.GEMINI_API_KEY) {
+      this.genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY)
     }
   }
 
@@ -39,7 +38,7 @@ export class AiService {
     cycleContext?: Record<string, unknown>,
     isPremium = false
   ) {
-    if (!this.openai) {
+    if (!this.genAI) {
       return {
         content: 'El servicio de IA Luna no está disponible en este momento. Por favor intenta más tarde. 🌙',
         remainingToday: isPremium ? RATE_LIMIT_PREMIUM : RATE_LIMIT_FREE,
@@ -63,24 +62,26 @@ export class AiService {
       systemPrompt += `\n\nContexto actual de la usuaria: ${cycleContext.user_context}`
     }
 
-    const openaiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: 'system', content: systemPrompt },
-      ...messages.map((m) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      })),
-    ]
+    // Gemini uses 'user'/'model' roles (not 'assistant')
+    const history = messages.slice(0, -1).map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }))
 
-    const completion = await this.openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: openaiMessages,
-      max_tokens: 600,
-      temperature: 0.7,
+    const lastMessage = messages[messages.length - 1]?.content ?? ''
+
+    const model = this.genAI.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      systemInstruction: systemPrompt,
     })
 
-    const content =
-      completion.choices[0]?.message?.content ??
-      'Lo siento, no pude procesar tu mensaje. Por favor intenta de nuevo.'
+    const chat = model.startChat({
+      history,
+      generationConfig: { maxOutputTokens: 600, temperature: 0.7 },
+    })
+
+    const result = await chat.sendMessage(lastMessage)
+    const content = result.response.text() || 'Lo siento, no pude procesar tu mensaje. Intenta de nuevo.'
 
     return {
       content,
@@ -140,94 +141,69 @@ export class AiService {
     return prisma.aiChat.findUnique({
       where: { id: chatId, userId },
       include: {
-        messages: {
-          orderBy: { createdAt: 'asc' },
-          take: 50,
-        },
+        messages: { orderBy: { createdAt: 'asc' }, take: 50 },
       },
     })
   }
 
   async analyzePatterns(userId: string) {
-    if (!this.openai) return { insights: [], available: false }
+    if (!this.genAI) return { insights: [], available: false }
 
     const cycles = await prisma.menstrualCycle.findMany({
       where: { userId },
       orderBy: { startDate: 'desc' },
       take: 12,
-      include: { bleedingDays: true },
     })
 
     if (cycles.length < 2) return { insights: [], available: true }
 
     const avgLength =
       cycles.slice(0, -1).reduce((sum, c, i) => {
-        const next = cycles[i + 1]
         const diff = Math.round(
-          (new Date(c.startDate).getTime() - new Date(next.startDate).getTime()) / 86400000
+          (new Date(c.startDate).getTime() - new Date(cycles[i + 1].startDate).getTime()) / 86400000
         )
         return sum + diff
       }, 0) / (cycles.length - 1)
 
-    const prompt = `Analiza estos datos del ciclo menstrual y proporciona 3 insights personalizados en español. Sé concisa y práctica.
-Ciclos recientes: ${cycles.length} ciclos registrados.
-Duración promedio del ciclo: ${Math.round(avgLength)} días.
-Responde SOLO con un JSON array de strings, ejemplo: ["Insight 1", "Insight 2", "Insight 3"]`
+    const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    const prompt = `Analiza estos datos del ciclo menstrual y da 3 insights cortos en español (una oración cada uno). Responde SOLO como JSON: {"insights": ["...", "...", "..."]}
+Datos: ${cycles.length} ciclos, duración promedio ${Math.round(avgLength)} días.`
 
     try {
-      const completion = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 300,
-        temperature: 0.5,
-        response_format: { type: 'json_object' },
-      })
-
-      const raw = completion.choices[0]?.message?.content ?? '{}'
-      const parsed = JSON.parse(raw)
-      const insights: string[] = Array.isArray(parsed.insights) ? parsed.insights : []
-      return { insights, available: true }
+      const result = await model.generateContent(prompt)
+      const raw = result.response.text()
+      const match = raw.match(/\{[\s\S]*\}/)
+      if (match) {
+        const parsed = JSON.parse(match[0])
+        return { insights: parsed.insights ?? [], available: true }
+      }
+      return { insights: [], available: true }
     } catch {
       return { insights: [], available: true }
     }
   }
 
   async generateMonthlyInsight(userId: string, year: number, month: number) {
-    if (!this.openai) return { insight: null, available: false }
+    if (!this.genAI) return { insight: null, available: false }
 
     const startDate = new Date(year, month - 1, 1)
     const endDate = new Date(year, month, 0)
 
     const [cycles, symptoms, moods, streak] = await Promise.all([
-      prisma.menstrualCycle.findMany({
-        where: { userId, startDate: { gte: startDate, lte: endDate } },
-      }),
+      prisma.menstrualCycle.findMany({ where: { userId, startDate: { gte: startDate, lte: endDate } } }),
       prisma.symptomLog.count({ where: { userId, date: { gte: startDate, lte: endDate } } }),
-      prisma.moodLog.findMany({
-        where: { userId, date: { gte: startDate, lte: endDate } },
-        select: { mood: true },
-      }),
+      prisma.moodLog.findMany({ where: { userId, date: { gte: startDate, lte: endDate } }, select: { mood: true } }),
       prisma.userStreak.findUnique({ where: { userId } }),
     ])
 
     const dominantMood = this.getDominantMood(moods.map((m) => m.mood))
-    const prompt = `Genera un insight mensual de salud femenina en español para una usuaria con los siguientes datos:
-- Mes: ${year}-${month}
-- Ciclos registrados: ${cycles.length}
-- Registros de síntomas: ${symptoms}
-- Estado de ánimo predominante: ${dominantMood ?? 'no registrado'}
-- Racha actual: ${streak?.currentStreak ?? 0} días
-Sé alentadora, específica y útil. Máximo 3 oraciones.`
+    const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    const prompt = `Genera un insight mensual de salud femenina en español. Sé alentadora y específica. Máximo 3 oraciones.
+Datos: ${year}-${month}, ${cycles.length} ciclos, ${symptoms} registros de síntomas, ánimo predominante: ${dominantMood ?? 'no registrado'}, racha: ${streak?.currentStreak ?? 0} días.`
 
     try {
-      const completion = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 200,
-        temperature: 0.7,
-      })
-      const insight = completion.choices[0]?.message?.content ?? null
-      return { insight, available: true }
+      const result = await model.generateContent(prompt)
+      return { insight: result.response.text(), available: true }
     } catch {
       return { insight: null, available: true }
     }
