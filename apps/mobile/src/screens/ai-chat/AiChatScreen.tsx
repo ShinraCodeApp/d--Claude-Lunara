@@ -16,9 +16,12 @@ import { useMutation } from '@tanstack/react-query'
 import Animated, { FadeInUp } from 'react-native-reanimated'
 import dayjs from 'dayjs'
 
-import { useAuthStore, useCycleStore } from '@/store'
+import { useAuthStore, useCycleStore, useSymptomStore } from '@/store'
 import apiClient from '@/api/client'
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '@/theme'
+import { generateLocalResponse, buildLunaContext } from '@/utils/lunaLocal'
+
+const genId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
 interface Message {
   id: string
@@ -34,28 +37,58 @@ const WELCOME_MESSAGE: Message = {
   timestamp: new Date(),
 }
 
-const SUGGESTION_PROMPTS = [
-  '¿Qué síntomas son normales en la fase lútea?',
-  '¿Cómo puedo calmar los cólicos menstruales?',
-  '¿Cuándo es mi ventana fértil?',
-  '¿Por qué mi ciclo es irregular?',
-]
+const SUGGESTION_PROMPTS_BY_PHASE: Record<string, string[]> = {
+  menstrual: [
+    '¿Cómo calmo los cólicos menstruales?',
+    '¿Qué alimentos ayudan durante el período?',
+    '¿Es normal tener tanto cansancio?',
+    '¿Cuánto puede durar el período?',
+  ],
+  follicular: [
+    '¿Cómo aprovechar esta fase de energía?',
+    '¿Cuándo se acerca mi ovulación?',
+    '¿Qué ejercicio es mejor ahora?',
+    '¿Por qué me siento más sociable?',
+  ],
+  ovulatory: [
+    '¿Estoy en mi ventana fértil ahora?',
+    '¿Cómo confirmar que ovulé?',
+    '¿Qué signos indican ovulación?',
+    '¿Cuánto dura la fase ovulatoria?',
+  ],
+  luteal: [
+    '¿Por qué me siento irritable antes del período?',
+    '¿Cómo aliviar los síntomas del PMS?',
+    '¿Es TDPM o PMS normal?',
+    '¿Qué alimentos reducen la retención de líquidos?',
+  ],
+  default: [
+    '¿Qué síntomas son normales en la fase lútea?',
+    '¿Cómo calmar los cólicos menstruales?',
+    '¿Cuándo es mi ventana fértil?',
+    '¿Por qué mi ciclo es irregular?',
+  ],
+}
 
 export default function AiChatScreen() {
   const insets = useSafeAreaInsets()
   const { user } = useAuthStore()
   const cycleStore = useCycleStore()
+  const { logs } = useSymptomStore()
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE])
   const [input, setInput] = useState('')
   const [remainingToday, setRemainingToday] = useState<number | null>(null)
+  const [isOffline, setIsOffline] = useState(false)
   const flatListRef = useRef<FlatList>(null)
 
   const isPremium = user?.subscription?.isPremium ?? false
+  const phase = cycleStore.currentPhase
+  const suggestionPrompts = SUGGESTION_PROMPTS_BY_PHASE[phase ?? 'default'] ?? SUGGESTION_PROMPTS_BY_PHASE.default
 
   const sendMutation = useMutation({
     mutationFn: async (userMessage: string) => {
       const userMsg: Message = {
-        id: crypto.randomUUID(),
+        id: genId(),
         role: 'user',
         content: userMessage,
         timestamp: new Date(),
@@ -64,6 +97,7 @@ export default function AiChatScreen() {
       const updatedMessages = [...messages, userMsg]
       setMessages(updatedMessages)
 
+      const last14Logs = logs.slice(-14)
       const { data } = await apiClient.post('/ai/chat', {
         messages: updatedMessages.slice(-10).map((m) => ({
           role: m.role,
@@ -75,6 +109,7 @@ export default function AiChatScreen() {
           avg_cycle_length: 28,
           next_period: cycleStore.nextPeriodDate,
           next_ovulation: cycleStore.nextOvulationDate,
+          user_context: buildLunaContext(cycleStore.currentPhase, cycleStore.dayOfCycle, last14Logs),
         } : null,
       })
 
@@ -82,7 +117,7 @@ export default function AiChatScreen() {
     },
     onSuccess: ({ response, remaining, userMsg }) => {
       const assistantMsg: Message = {
-        id: crypto.randomUUID(),
+        id: genId(),
         role: 'assistant',
         content: response,
         timestamp: new Date(),
@@ -93,15 +128,34 @@ export default function AiChatScreen() {
     },
     onError: (error: any) => {
       const isRateLimit = error?.response?.status === 429
-      const errorMsg: Message = {
-        id: crypto.randomUUID(),
+      if (isRateLimit) {
+        const errorMsg: Message = {
+          id: genId(),
+          role: 'assistant',
+          content: `Has alcanzado el límite de mensajes de hoy.${!isPremium ? '\n\n💎 Actualiza a Premium para mensajes ilimitados.' : ''}`,
+          timestamp: new Date(),
+        }
+        setMessages((prev) => [...prev, errorMsg])
+        return
+      }
+
+      // Backend offline → generar respuesta local con datos reales del usuario
+      setIsOffline(true)
+      const lastUserMsg = sendMutation.variables as string
+      const localResponse = generateLocalResponse(
+        lastUserMsg ?? '',
+        cycleStore.currentPhase,
+        cycleStore.dayOfCycle,
+        logs
+      )
+      const offlineMsg: Message = {
+        id: genId(),
         role: 'assistant',
-        content: isRateLimit
-          ? `Has alcanzado el límite de mensajes de hoy.${!isPremium ? '\n\n💎 Actualiza a Premium para mensajes ilimitados.' : ''}`
-          : 'Lo siento, tuve un problema al procesar tu mensaje. Por favor inténtalo de nuevo.',
+        content: localResponse,
         timestamp: new Date(),
       }
-      setMessages((prev) => [...prev, errorMsg])
+      setMessages((prev) => [...prev, offlineMsg])
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100)
     },
   })
 
@@ -147,8 +201,13 @@ export default function AiChatScreen() {
         style={[styles.header, { paddingTop: insets.top + 8 }]}
       >
         <Text style={styles.headerTitle}>🌙 Luna</Text>
-        <Text style={styles.headerSubtitle}>Asistente de salud femenina</Text>
-        {remainingToday !== null && !isPremium && (
+        <Text style={styles.headerSubtitle}>
+          {isOffline ? 'Modo offline · Respuestas con tus datos locales' : 'Asistente de salud femenina'}
+        </Text>
+        {isOffline && (
+          <Text style={styles.offlineText}>⚡ Sin conexión al servidor — Luna usa tus registros reales</Text>
+        )}
+        {remainingToday !== null && !isPremium && !isOffline && (
           <Text style={styles.remainingText}>{remainingToday} mensajes restantes hoy</Text>
         )}
       </LinearGradient>
@@ -167,9 +226,7 @@ export default function AiChatScreen() {
       {/* Suggestion chips (only at start) */}
       {messages.length === 1 && (
         <View style={styles.suggestions}>
-          <ScrollableChips prompts={SUGGESTION_PROMPTS} onSelect={(p) => {
-            setInput(p)
-          }} />
+          <ScrollableChips prompts={suggestionPrompts} onSelect={(p) => setInput(p)} />
         </View>
       )}
 
@@ -244,6 +301,12 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSize.xs,
     color: Colors.gold.main,
     marginTop: 4,
+  },
+  offlineText: {
+    fontSize: Typography.fontSize.xs,
+    color: '#a78bfa',
+    marginTop: 4,
+    textAlign: 'center',
   },
   messagesList: {
     padding: Spacing.md,

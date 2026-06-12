@@ -26,7 +26,6 @@ export class AiService {
   private genAI: GoogleGenerativeAI | null = null
 
   constructor() {
-    const key = env.GEMINI_API_KEY || env.OPENAI_API_KEY
     if (env.GEMINI_API_KEY) {
       this.genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY)
     }
