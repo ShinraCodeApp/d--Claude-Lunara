@@ -90,9 +90,10 @@ export class AiService {
         remainingToday: isPremium ? null : Math.max(0, limit - count),
       }
     } catch (err: any) {
-      console.error('Gemini error:', err?.message ?? err)
+      const errMsg = err?.message ?? String(err)
+      console.error('Gemini error:', errMsg)
       return {
-        content: 'Lo siento, hubo un problema al procesar tu mensaje. Por favor intenta de nuevo. 🌙',
+        content: `[DEBUG] ${errMsg}`,
         remainingToday: isPremium ? null : Math.max(0, limit - count),
       }
     }
