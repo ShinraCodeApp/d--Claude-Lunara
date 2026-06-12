@@ -72,7 +72,7 @@ export class AiService {
     const history = firstUserIdx >= 0 ? rawHistory.slice(firstUserIdx) : []
 
     const model = this.genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.0-flash',
       systemInstruction: systemPrompt,
     })
 
@@ -90,10 +90,9 @@ export class AiService {
         remainingToday: isPremium ? null : Math.max(0, limit - count),
       }
     } catch (err: any) {
-      const errMsg = err?.message ?? String(err)
-      console.error('Gemini error:', errMsg)
+      console.error('Gemini error:', err?.message ?? err)
       return {
-        content: `[DEBUG] Gemini error: ${errMsg}`,
+        content: 'Lo siento, hubo un problema al procesar tu mensaje. Por favor intenta de nuevo. 🌙',
         remainingToday: isPremium ? null : Math.max(0, limit - count),
       }
     }
@@ -175,7 +174,7 @@ export class AiService {
         return sum + diff
       }, 0) / (cycles.length - 1)
 
-    const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    const model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
     const prompt = `Analiza estos datos del ciclo menstrual y da 3 insights cortos en español (una oración cada uno). Responde SOLO como JSON: {"insights": ["...", "...", "..."]}
 Datos: ${cycles.length} ciclos, duración promedio ${Math.round(avgLength)} días.`
 
@@ -207,7 +206,7 @@ Datos: ${cycles.length} ciclos, duración promedio ${Math.round(avgLength)} día
     ])
 
     const dominantMood = this.getDominantMood(moods.map((m) => m.mood))
-    const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    const model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
     const prompt = `Genera un insight mensual de salud femenina en español. Sé alentadora y específica. Máximo 3 oraciones.
 Datos: ${year}-${month}, ${cycles.length} ciclos, ${symptoms} registros de síntomas, ánimo predominante: ${dominantMood ?? 'no registrado'}, racha: ${streak?.currentStreak ?? 0} días.`
 
