@@ -13,16 +13,14 @@ import { router } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 
 import apiClient from '@/api/client'
-import { useAuthStore } from '@/store'
+import { useAuthStore, useSettingsStore } from '@/store'
+import { registerLocalAccount, loginLocalAccount } from '@/utils/localAuth'
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
-
-GoogleSignin.configure({
-  webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-})
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets()
   const { setUser, setToken } = useAuthStore()
+  const { hasSeenOnboarding } = useSettingsStore()
 
   const [isLogin, setIsLogin] = useState(true)
   const [email, setEmail] = useState('')
@@ -31,36 +29,82 @@ export default function LoginScreen() {
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
 
+  const applyLocalAccount = (account: ReturnType<typeof loginLocalAccount> extends { account: infer A } ? A : never, isNew: boolean) => {
+    setToken(`local-token-${account.id}`)
+    setUser({
+      id: account.id,
+      email: account.email,
+      role: 'user',
+      profile: {
+        firstName: account.firstName,
+        lastName: '',
+        avatarUrl: undefined,
+        onboardingCompleted: !isNew && hasSeenOnboarding,
+      },
+      subscription: {
+        tier: account.isPremium ? 'PREMIUM' : 'FREE',
+        status: 'active',
+        isPremium: account.isPremium,
+        currentPeriodEnd: account.isPremium ? '2099-01-01T00:00:00.000Z' : undefined,
+      },
+    })
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+    router.replace(isNew ? '/onboarding' : hasSeenOnboarding ? '/(tabs)' : '/onboarding')
+  }
+
+  const handleLocalAuth = () => {
+    setError('')
+    if (isLogin) {
+      const result = loginLocalAccount(email, password)
+      if (!result.success) {
+        setError(result.error)
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+        return
+      }
+      applyLocalAccount(result.account, false)
+    } else {
+      const result = registerLocalAccount(email, password, firstName)
+      if (!result.success) {
+        setError(result.error)
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+        return
+      }
+      applyLocalAccount(result.account, true)
+    }
+  }
+
   const authMutation = useMutation({
     mutationFn: async () => {
+      // Try backend first; fall back to local auth if unreachable
       if (isLogin) {
         const { data } = await apiClient.post('/auth/login', { email, password })
-        return data
+        return { ...data, fromBackend: true }
       } else {
         const { data } = await apiClient.post('/auth/register', {
           email, password, firstName, acceptTerms: true,
         })
-        return data
+        return { ...data, fromBackend: true }
       }
     },
     onSuccess: (data) => {
-      setToken(data.accessToken)
-      setUser(data.user)
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-      if (data.isNewUser) {
-        router.replace('/onboarding')
-      } else {
-        router.replace('/(tabs)')
+      if (data.fromBackend) {
+        setToken(data.accessToken)
+        if (data.refreshToken) useAuthStore.getState().setRefreshToken(data.refreshToken)
+        setUser(data.user)
       }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      if (data.isNewUser) router.replace('/onboarding')
+      else router.replace('/(tabs)')
     },
-    onError: (err: any) => {
-      setError(err?.response?.data?.message || 'Error al iniciar sesión')
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+    onError: () => {
+      // Backend unreachable — use local auth
+      handleLocalAuth()
     },
   })
 
   const googleMutation = useMutation({
     mutationFn: async () => {
+      GoogleSignin.configure({ webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID })
       await GoogleSignin.hasPlayServices()
       const { idToken } = await GoogleSignin.signIn()
       const { data } = await apiClient.post('/auth/google', { idToken })
@@ -232,6 +276,7 @@ export default function LoginScreen() {
                 <Text style={[styles.socialBtnText, { color: '#fff' }]}>Continuar con Apple</Text>
               </TouchableOpacity>
             )}
+
           </Animated.View>
 
           {/* Footer */}

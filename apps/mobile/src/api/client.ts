@@ -55,10 +55,12 @@ apiClient.interceptors.response.use(
       isRefreshing = true
 
       try {
-        const response = await apiClient.post('/auth/refresh')
-        const { accessToken } = response.data
+        const storedRefresh = useAuthStore.getState().refreshToken
+        const response = await apiClient.post('/auth/refresh', { refreshToken: storedRefresh })
+        const { accessToken, refreshToken: newRefresh } = response.data
 
         useAuthStore.getState().setToken(accessToken)
+        if (newRefresh) useAuthStore.getState().setRefreshToken(newRefresh)
         processQueue(null, accessToken)
 
         originalRequest.headers.Authorization = `Bearer ${accessToken}`
