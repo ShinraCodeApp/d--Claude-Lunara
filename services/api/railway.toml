@@ -3,7 +3,7 @@ builder = "nixpacks"
 buildCommand = "npm install --include=dev && npm run build"
 
 [deploy]
-startCommand = "npx prisma db push --accept-data-loss && npm start"
+startCommand = "npx prisma db push --accept-data-loss && npx prisma db seed && npm start"
 healthcheckPath = "/api/v1/health"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"
