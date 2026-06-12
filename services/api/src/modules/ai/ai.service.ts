@@ -57,20 +57,25 @@ export class AiService {
     }
 
     // Build contents array — Gemini v1 REST format
-    // History must start with 'user' role
+    // Prepend system prompt as first user+model exchange (compatible with all API versions)
     const allMsgs = messages.map((m) => ({
       role: m.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: m.content }],
     }))
     const firstUserIdx = allMsgs.findIndex((m) => m.role === 'user')
-    const contents = firstUserIdx >= 0 ? allMsgs.slice(firstUserIdx) : allMsgs
+    const conversation = firstUserIdx >= 0 ? allMsgs.slice(firstUserIdx) : allMsgs
+
+    const contents = [
+      { role: 'user', parts: [{ text: `[Instrucciones del sistema]\n${systemPrompt}` }] },
+      { role: 'model', parts: [{ text: 'Entendido. Soy Luna 🌙, lista para ayudarte.' }] },
+      ...conversation,
+    ]
 
     try {
       const res = await fetch(GEMINI_URL(GEMINI_MODEL), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
           contents,
           generationConfig: { maxOutputTokens: 600, temperature: 0.7 },
         }),
