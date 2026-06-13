@@ -122,9 +122,11 @@ interface GardenState {
   crystalBalance: number
   currentStreak: number
   longestStreak: number
+  purchasedItems: string[]
   setGarden: (data: Partial<GardenState>) => void
   earnCrystals: (amount: number) => void
   spendCrystals: (amount: number) => boolean
+  purchaseItem: (itemId: string) => void
 }
 
 export const useGardenStore = create<GardenState>()(
@@ -136,6 +138,7 @@ export const useGardenStore = create<GardenState>()(
       crystalBalance: 0,
       currentStreak: 0,
       longestStreak: 0,
+      purchasedItems: [],
       setGarden: (data) => set((state) => ({ ...state, ...data })),
       earnCrystals: (amount) => set((s) => ({ crystalBalance: s.crystalBalance + amount })),
       spendCrystals: (amount) => {
@@ -144,6 +147,8 @@ export const useGardenStore = create<GardenState>()(
         set((s) => ({ crystalBalance: s.crystalBalance - amount }))
         return true
       },
+      purchaseItem: (itemId) =>
+        set((s) => ({ purchasedItems: s.purchasedItems.includes(itemId) ? s.purchasedItems : [...s.purchasedItems, itemId] })),
     }),
     {
       name: 'garden',
@@ -330,6 +335,15 @@ interface SettingsState {
   // First period
   isFirstPeriod: boolean | null
   setIsFirstPeriod: (v: boolean | null) => void
+  // Notification fine-grained settings
+  pillReminderEnabled: boolean
+  waterReminderEnabled: boolean
+  logReminderHour: number
+  pillReminderHour: number
+  setPillReminderEnabled: (v: boolean) => void
+  setWaterReminderEnabled: (v: boolean) => void
+  setLogReminderHour: (h: number) => void
+  setPillReminderHour: (h: number) => void
   setTheme: (theme: SettingsState['theme']) => void
   setLocale: (locale: string) => void
   setUseMascot: (v: boolean) => void
@@ -373,6 +387,10 @@ export const useSettingsStore = create<SettingsState>()(
       pcosMode: false,
       hasSeenPrivacyConsent: false,
       isFirstPeriod: null,
+      pillReminderEnabled: false,
+      waterReminderEnabled: false,
+      logReminderHour: 20,
+      pillReminderHour: 9,
       setTheme: (theme) => set({ theme }),
       setLocale: (locale) => set({ locale }),
       setUseMascot: (useMascot) => set({ useMascot }),
@@ -392,6 +410,10 @@ export const useSettingsStore = create<SettingsState>()(
       setPregnancyStartDate: (pregnancyStartDate) => set({ pregnancyStartDate }),
       setContraceptive: (contraceptive) => set({ contraceptive }),
       setPcosMode: (pcosMode) => set({ pcosMode }),
+      setPillReminderEnabled: (pillReminderEnabled) => set({ pillReminderEnabled }),
+      setWaterReminderEnabled: (waterReminderEnabled) => set({ waterReminderEnabled }),
+      setLogReminderHour: (logReminderHour) => set({ logReminderHour }),
+      setPillReminderHour: (pillReminderHour) => set({ pillReminderHour }),
       setHasSeenPrivacyConsent: (hasSeenPrivacyConsent) => set({ hasSeenPrivacyConsent }),
       setIsFirstPeriod: (isFirstPeriod) => set({ isFirstPeriod }),
     }),

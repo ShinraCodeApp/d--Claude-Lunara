@@ -285,6 +285,9 @@ export async function scheduleMoodHeadsUp(phase: string, mood: string) {
   if (!body) return
 
   await Notifications.cancelScheduledNotificationAsync('mood-heads-up').catch(() => {})
+  const fireAt = new Date()
+  fireAt.setHours(11, 0, 0, 0)
+  if (fireAt <= new Date()) fireAt.setDate(fireAt.getDate() + 1)
   await Notifications.scheduleNotificationAsync({
     identifier: 'mood-heads-up',
     content: {
@@ -293,7 +296,7 @@ export async function scheduleMoodHeadsUp(phase: string, mood: string) {
       data: { screen: '/(tabs)/log' },
       categoryIdentifier: 'lunara-health',
     },
-    trigger: { hour: 11, minute: 0, repeats: false } as any,
+    trigger: { date: fireAt, channelId: 'lunara-health' } as Notifications.DateTriggerInput,
   })
 }
 

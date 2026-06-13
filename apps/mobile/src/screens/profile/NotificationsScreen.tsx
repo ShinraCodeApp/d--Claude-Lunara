@@ -71,18 +71,24 @@ const SETTINGS: NotifSetting[] = [
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets()
   const { nextPeriodDate, fertileWindowStart, nextOvulationDate } = useCycleStore()
-  const settings = useSettingsStore()
+  const {
+    notificationsEnabled, setNotificationsEnabled,
+    pillReminderEnabled, setPillReminderEnabled,
+    waterReminderEnabled, setWaterReminderEnabled,
+    logReminderHour: storedLogHour, setLogReminderHour,
+    pillReminderHour: storedPillHour, setPillReminderHour,
+  } = useSettingsStore()
 
   const [state, setState] = useState<NotifState>({
-    logReminder: settings.notificationsEnabled,
-    pillReminder: false,
-    waterReminder: false,
+    logReminder: notificationsEnabled,
+    pillReminder: pillReminderEnabled,
+    waterReminder: waterReminderEnabled,
     cycleAlerts: true,
     fertileAlerts: true,
     ovulationAlerts: true,
   })
-  const [logHour, setLogHour] = useState(20)
-  const [pillHour, setPillHour] = useState(9)
+  const [logHour, setLogHour] = useState(storedLogHour)
+  const [pillHour, setPillHour] = useState(storedPillHour)
   const [hasPermission, setHasPermission] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -110,6 +116,13 @@ export default function NotificationsScreen() {
   const handleSave = async () => {
     setSaving(true)
     try {
+      // Persist to store so _layout re-schedules correctly on app restart
+      setNotificationsEnabled(state.logReminder)
+      setPillReminderEnabled(state.pillReminder)
+      setWaterReminderEnabled(state.waterReminder)
+      setLogReminderHour(logHour)
+      setPillReminderHour(pillHour)
+
       if (!Object.values(state).some(Boolean)) {
         await cancelAllLunaraNotifications()
       } else {

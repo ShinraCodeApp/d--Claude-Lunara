@@ -65,9 +65,9 @@ const SHOP_ITEMS = [
 
 export default function GardenScreen() {
   const insets = useSafeAreaInsets()
-  const { stage, xp, level, crystalBalance, setGarden, spendCrystals, earnCrystals } = useGardenStore()
+  const { stage, xp, level, crystalBalance, setGarden, spendCrystals, earnCrystals, purchasedItems: storedPurchases, purchaseItem } = useGardenStore()
   const stageInfo = GARDEN_STAGES[stage]
-  const [purchasedItems, setPurchasedItems] = React.useState<Set<string>>(new Set())
+  const purchasedSet = new Set(storedPurchases)
 
   // Floating animation for garden emoji
   const floatY = useSharedValue(0)
@@ -132,7 +132,7 @@ export default function GardenScreen() {
       spendCrystals(item.cost)
     },
     onSuccess: (item) => {
-      setPurchasedItems((prev) => new Set([...prev, item.id]))
+      purchaseItem(item.id)
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       refetch()
     },
@@ -279,7 +279,7 @@ export default function GardenScreen() {
           <View style={styles.shopGrid}>
             {SHOP_ITEMS.map((item) => {
               const canAfford = crystalBalance >= item.cost
-              const isPurchased = purchasedItems.has(item.id)
+              const isPurchased = purchasedSet.has(item.id)
               const isBuying = purchaseMutation.isPending && purchaseMutation.variables?.id === item.id
               return (
                 <TouchableOpacity

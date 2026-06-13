@@ -139,7 +139,7 @@ const queryClient = new QueryClient({
 
 function RootLayoutNav() {
   const { isAuthenticated } = useAuthStore()
-  const { hasSeenOnboarding, notificationsEnabled, pinEnabled, hasSeenPrivacyConsent } = useSettingsStore()
+  const { hasSeenOnboarding, notificationsEnabled, pinEnabled, hasSeenPrivacyConsent, pillReminderEnabled, waterReminderEnabled, logReminderHour, pillReminderHour } = useSettingsStore()
   const { nextPeriodDate, fertileWindowStart, nextOvulationDate, currentPhase, dayOfCycle } = useCycleStore()
   const [unlocked, setUnlocked] = React.useState(!pinEnabled)
 
@@ -161,10 +161,10 @@ function RootLayoutNav() {
         fertileWindowStart,
         nextOvulationDate,
         logReminderEnabled: notificationsEnabled,
-        pillReminderEnabled: false,
-        waterReminderEnabled: false,
-        logReminderHour: 20,
-        pillReminderHour: 9,
+        pillReminderEnabled,
+        waterReminderEnabled,
+        logReminderHour,
+        pillReminderHour,
       })
     })
   }, [isAuthenticated, nextPeriodDate])
