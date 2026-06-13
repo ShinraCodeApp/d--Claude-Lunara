@@ -96,9 +96,16 @@ export default function LoginScreen() {
       if (data.isNewUser) router.replace('/onboarding')
       else router.replace('/(tabs)')
     },
-    onError: () => {
-      // Backend unreachable — use local auth
-      handleLocalAuth()
+    onError: (error: any) => {
+      if (error?.response) {
+        // Backend responded with an error (4xx/5xx) — show it, don't fall back to local
+        const msg = error.response.data?.message ?? 'Error al iniciar sesión. Por favor intenta de nuevo.'
+        setError(msg)
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      } else {
+        // Network error — backend unreachable, fall back to local auth
+        handleLocalAuth()
+      }
     },
   })
 

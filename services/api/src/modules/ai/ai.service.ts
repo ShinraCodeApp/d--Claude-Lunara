@@ -85,7 +85,7 @@ export class AiService {
         const errText = await res.text()
         console.error('Gemini HTTP error:', res.status, errText)
         return {
-          content: `[v2-REST-${res.status}] ${errText.slice(0, 200)}`,
+          content: 'Lo siento, hubo un problema al procesar tu mensaje. Por favor intenta de nuevo. 🌙',
           remainingToday: isPremium ? null : Math.max(0, limit - count),
         }
       }
