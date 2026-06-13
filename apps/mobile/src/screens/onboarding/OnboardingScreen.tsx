@@ -18,6 +18,7 @@ import apiClient from '@/api/client'
 import { useSettingsStore, useAuthStore } from '@/store'
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
 
+
 const { width, height } = Dimensions.get('window')
 
 const CYCLE_LENGTHS = [21, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 38, 40, 45]
@@ -44,6 +45,7 @@ const CONTRACEPTIVES = [
 
 interface OnboardingData {
   firstName: string
+  isFirstPeriod: boolean | null
   goals: string[]
   lastPeriodDate: string
   averageCycleLength: number
@@ -53,21 +55,23 @@ interface OnboardingData {
 }
 
 const STEPS = [
-  { key: 'welcome', title: '¡Bienvenida a Lunara!', subtitle: 'Tu compañera de salud femenina' },
-  { key: 'name', title: '¿Cómo te llamamos?', subtitle: 'Esto es completamente opcional' },
-  { key: 'goals', title: '¿Cuál es tu objetivo?', subtitle: 'Elige todos los que apliquen' },
-  { key: 'cycle', title: 'Tu ciclo menstrual', subtitle: 'Esto nos ayuda a calcular predicciones' },
-  { key: 'mascot', title: 'Conoce a Luna', subtitle: 'Tu guía personal de salud' },
+  { key: 'welcome',    title: '¡Bienvenida a Lunara!',   subtitle: 'Tu compañera de salud femenina' },
+  { key: 'name',       title: '¿Cómo te llamamos?',       subtitle: 'Esto es completamente opcional' },
+  { key: 'experience', title: '¿Es tu primer período?',   subtitle: 'Así podemos guiarte mejor' },
+  { key: 'goals',      title: '¿Cuál es tu objetivo?',    subtitle: 'Elige todos los que apliquen' },
+  { key: 'cycle',      title: 'Tu ciclo menstrual',       subtitle: 'Esto nos ayuda a calcular predicciones' },
+  { key: 'mascot',     title: 'Conoce a Luna',            subtitle: 'Tu guía personal de salud' },
 ]
 
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets()
-  const { setHasSeenOnboarding, setUseMascot } = useSettingsStore()
+  const { setHasSeenOnboarding, setUseMascot, setIsFirstPeriod } = useSettingsStore()
   const { updateProfile } = useAuthStore()
 
   const [step, setStep] = useState(0)
   const [data, setData] = useState<OnboardingData>({
     firstName: '',
+    isFirstPeriod: null,
     goals: [],
     lastPeriodDate: dayjs().subtract(14, 'day').format('YYYY-MM-DD'),
     averageCycleLength: 28,
@@ -81,6 +85,18 @@ export default function OnboardingScreen() {
     width: `${((step + 1) / STEPS.length) * 100}%`,
   }))
 
+  const finishOnboarding = () => {
+    setHasSeenOnboarding(true)
+    setUseMascot(data.useMascot)
+    setIsFirstPeriod(data.isFirstPeriod)
+    if (data.firstName) updateProfile({ firstName: data.firstName })
+    if (data.isFirstPeriod === true) {
+      router.replace('/first-period-info')
+    } else {
+      router.replace('/(tabs)')
+    }
+  }
+
   const completeMutation = useMutation({
     mutationFn: () => apiClient.post('/users/complete-onboarding', {
       lastPeriodDate: data.lastPeriodDate,
@@ -88,17 +104,19 @@ export default function OnboardingScreen() {
       averagePeriodLength: data.averagePeriodLength,
     }),
     onSuccess: () => {
-      setHasSeenOnboarding(true)
-      setUseMascot(data.useMascot)
-      if (data.firstName) {
-        updateProfile({ firstName: data.firstName })
-        apiClient.put('/users/profile', { firstName: data.firstName })
-      }
-      router.replace('/(tabs)')
+      if (data.firstName) apiClient.put('/users/profile', { firstName: data.firstName }).catch(() => {})
+      finishOnboarding()
+    },
+    onError: () => {
+      // Backend unavailable — complete locally so the user isn't stuck
+      finishOnboarding()
     },
   })
 
+  const canAdvance = !(STEPS[step].key === 'experience' && data.isFirstPeriod === null)
+
   const nextStep = () => {
+    if (!canAdvance) return
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     if (step < STEPS.length - 1) {
       setStep(step + 1)
@@ -181,8 +199,67 @@ export default function OnboardingScreen() {
           </Animated.View>
         )}
 
-        {/* ─── Step: Goals ─────────────────────────────── */}
+        {/* ─── Step: Experience ───────────────────────── */}
         {step === 2 && (
+          <Animated.View entering={FadeInDown} style={styles.stepContent}>
+            <Text style={styles.heroEmoji}>🌸</Text>
+            <Text style={styles.heroTitle}>{currentStep.title}</Text>
+            <Text style={styles.heroSubtitle}>{currentStep.subtitle}</Text>
+
+            <View style={styles.experienceOptions}>
+              <TouchableOpacity
+                style={[styles.experienceBtn, data.isFirstPeriod === true && styles.experienceBtnSelected]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+                  setData((d) => ({
+                    ...d,
+                    isFirstPeriod: true,
+                    lastPeriodDate: dayjs().format('YYYY-MM-DD'),
+                  }))
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.experienceBtnEmoji}>🌱</Text>
+                <Text style={styles.experienceBtnTitle}>Mi 1° período</Text>
+                <Text style={styles.experienceBtnDesc}>
+                  Es mi primera vez y quiero entender qué me está pasando en mi cuerpo
+                </Text>
+                {data.isFirstPeriod === true && (
+                  <View style={styles.experienceCheck}><Text style={styles.experienceCheckText}>✓</Text></View>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.experienceBtn, data.isFirstPeriod === false && styles.experienceBtnSelected]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+                  setData((d) => ({ ...d, isFirstPeriod: false }))
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.experienceBtnEmoji}>💪</Text>
+                <Text style={styles.experienceBtnTitle}>Tengo experiencia</Text>
+                <Text style={styles.experienceBtnDesc}>
+                  Ya conozco mi ciclo y quiero hacer un seguimiento más detallado
+                </Text>
+                {data.isFirstPeriod === false && (
+                  <View style={styles.experienceCheck}><Text style={styles.experienceCheckText}>✓</Text></View>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {data.isFirstPeriod === true && (
+              <Animated.View entering={FadeInDown.duration(300)} style={styles.firstPeriodHint}>
+                <Text style={styles.firstPeriodHintText}>
+                  🌙 Al terminar la configuración te explicaremos todo sobre tu primer ciclo
+                </Text>
+              </Animated.View>
+            )}
+          </Animated.View>
+        )}
+
+        {/* ─── Step: Goals ─────────────────────────────── */}
+        {step === 3 && (
           <Animated.View entering={FadeInDown} style={styles.stepContent}>
             <Text style={styles.heroEmoji}>🎯</Text>
             <Text style={styles.heroTitle}>{currentStep.title}</Text>
@@ -209,7 +286,7 @@ export default function OnboardingScreen() {
         )}
 
         {/* ─── Step: Cycle ─────────────────────────────── */}
-        {step === 3 && (
+        {step === 4 && (
           <Animated.View entering={FadeInDown} style={styles.stepContent}>
             <Text style={styles.heroEmoji}>🌑</Text>
             <Text style={styles.heroTitle}>{currentStep.title}</Text>
@@ -284,7 +361,7 @@ export default function OnboardingScreen() {
         )}
 
         {/* ─── Step: Mascot ─────────────────────────────── */}
-        {step === 4 && (
+        {step === 5 && (
           <Animated.View entering={FadeInDown} style={styles.stepContent}>
             <Text style={[styles.heroEmoji, { fontSize: 80 }]}>🌙</Text>
             <Text style={styles.heroTitle}>¡Hola! Soy Luna</Text>
@@ -334,9 +411,9 @@ export default function OnboardingScreen() {
         )}
 
         <TouchableOpacity
-          style={[styles.nextBtn, step === 0 && { flex: 1 }]}
+          style={[styles.nextBtn, (step === 0) && { flex: 1 }, (!canAdvance) && { opacity: 0.4 }]}
           onPress={nextStep}
-          disabled={completeMutation.isPending}
+          disabled={completeMutation.isPending || !canAdvance}
         >
           <LinearGradient
             colors={[Colors.primary[600], Colors.lavender[500]]}
@@ -346,6 +423,7 @@ export default function OnboardingScreen() {
             <Text style={styles.nextBtnText}>
               {step === STEPS.length - 1
                 ? completeMutation.isPending ? 'Configurando...' : '¡Comenzar mi viaje! 🌙'
+                : !canAdvance ? 'Elige una opción'
                 : 'Siguiente →'}
             </Text>
           </LinearGradient>
@@ -469,4 +547,52 @@ const styles = StyleSheet.create({
   nextBtn: { flex: 2, borderRadius: BorderRadius.xl, overflow: 'hidden' },
   nextBtnGradient: { paddingVertical: Spacing.md, alignItems: 'center' },
   nextBtnText: { color: '#fff', fontSize: Typography.fontSize.md, fontFamily: Typography.fontFamily.bold },
+  // Experience step
+  experienceOptions: { width: '100%', gap: Spacing.md },
+  experienceBtn: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.lg,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.15)',
+    position: 'relative',
+  },
+  experienceBtnSelected: {
+    borderColor: Colors.lavender[400],
+    backgroundColor: Colors.lavender[500] + '25',
+  },
+  experienceBtnEmoji: { fontSize: 36, marginBottom: Spacing.sm },
+  experienceBtnTitle: {
+    fontSize: Typography.fontSize.lg,
+    fontFamily: Typography.fontFamily.bold,
+    color: '#fff',
+    marginBottom: 4,
+  },
+  experienceBtnDesc: {
+    fontSize: Typography.fontSize.sm,
+    color: 'rgba(255,255,255,0.6)',
+    lineHeight: 20,
+  },
+  experienceCheck: {
+    position: 'absolute', top: 12, right: 12,
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: Colors.lavender[500],
+    alignItems: 'center', justifyContent: 'center',
+  },
+  experienceCheckText: { color: '#fff', fontSize: 13, fontFamily: Typography.fontFamily.bold },
+  firstPeriodHint: {
+    marginTop: Spacing.md,
+    backgroundColor: 'rgba(139,92,246,0.15)',
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(139,92,246,0.3)',
+    width: '100%',
+  },
+  firstPeriodHintText: {
+    fontSize: Typography.fontSize.sm,
+    color: '#c4b5fd',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
 })

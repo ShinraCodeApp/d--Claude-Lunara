@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Switch, Alert, ActivityIndicator,
+  ScrollView, Switch, Alert, ActivityIndicator, Image, Linking,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -12,6 +12,9 @@ import { router } from 'expo-router'
 
 import apiClient from '@/api/client'
 import { useAuthStore, useSettingsStore, useGardenStore } from '@/store'
+
+const SHINRA_LOGO = require('../../../assets/images/ShinraCodeLogo1.png')
+import { AVATARS } from '@/constants/avatars'
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '@/theme'
 
 interface ProfileSection {
@@ -32,7 +35,8 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets()
   const queryClient = useQueryClient()
   const { user, logout } = useAuthStore()
-  const { theme, setTheme, notificationsEnabled, setNotificationsEnabled, useMascot, setUseMascot } = useSettingsStore()
+  const { theme, setTheme, notificationsEnabled, setNotificationsEnabled, useMascot, setUseMascot, avatarId, avatarUri } = useSettingsStore()
+  const currentAvatar = AVATARS.find((a) => a.id === avatarId) ?? AVATARS[0]
   const { xp, stage, crystalBalance } = useGardenStore()
 
   const { data: profile, isLoading } = useQuery({
@@ -136,6 +140,68 @@ export default function ProfileScreen() {
           id: 'notifications', icon: '🔔', label: 'Notificaciones', type: 'nav',
           onPress: () => router.push('/profile/notifications'),
         },
+        {
+          id: 'partner', icon: '💑', label: 'Modo pareja', type: 'nav',
+          onPress: () => router.push('/profile/partner'),
+        },
+      ],
+    },
+    {
+      title: 'Salud',
+      items: [
+        {
+          id: 'contraceptive', icon: '💊', label: 'Anticonceptivo', type: 'nav',
+          onPress: () => router.push('/health/contraceptive'),
+        },
+        {
+          id: 'pregnancy', icon: '🤰', label: 'Modo embarazo', type: 'nav',
+          onPress: () => router.push('/health/pregnancy'),
+        },
+        {
+          id: 'correlations', icon: '🔬', label: 'Mis correlaciones', type: 'nav',
+          onPress: () => router.push('/insights/correlations'),
+        },
+        {
+          id: 'bbt', icon: '🌡️', label: 'Gráfico de temperatura', type: 'nav',
+          onPress: () => router.push('/insights/bbt-chart'),
+        },
+        {
+          id: 'yearly', icon: '📅', label: 'Historial anual', type: 'nav',
+          onPress: () => router.push('/cycle/yearly-history'),
+        },
+        {
+          id: 'medical', icon: '📋', label: 'Resumen médico', type: 'nav',
+          onPress: () => router.push('/profile/medical'),
+        },
+        {
+          id: 'cycle_compare', icon: '📊', label: 'Comparar ciclos', type: 'nav',
+          onPress: () => router.push('/insights/cycle-comparison'),
+        },
+        {
+          id: 'phase_tips', icon: '🥗', label: 'Recetas y ejercicio por fase', type: 'nav',
+          onPress: () => router.push('/health/phase-tips'),
+        },
+        {
+          id: 'pcos', icon: '🔄', label: 'Modo PCOS / ciclos irregulares', type: 'nav',
+          onPress: () => router.push('/health/pcos'),
+        },
+        {
+          id: 'pdf_report', icon: '📄', label: 'Reporte PDF para ginecóloga', type: 'nav',
+          onPress: () => router.push('/insights/pdf-report'),
+        },
+      ],
+    },
+    {
+      title: 'Seguridad',
+      items: [
+        {
+          id: 'pin', icon: '🔐', label: 'PIN / Bloqueo', type: 'nav',
+          onPress: () => router.push('/security/pin-setup'),
+        },
+        {
+          id: 'disguise', icon: '🎭', label: 'Modo Incógnito', type: 'nav',
+          onPress: () => router.push('/security/disguise'),
+        },
       ],
     },
     {
@@ -152,8 +218,8 @@ export default function ProfileScreen() {
           onPress: () => setUseMascot(!useMascot),
         },
         {
-          id: 'language', icon: '🌍', label: 'Idioma', type: 'value', value: 'Español',
-          onPress: () => {},
+          id: 'language', icon: '🌍', label: 'Idioma', type: 'nav',
+          onPress: () => router.push('/profile/language'),
         },
       ],
     },
@@ -161,12 +227,12 @@ export default function ProfileScreen() {
       title: 'Privacidad y datos',
       items: [
         {
-          id: 'export', icon: '📤', label: 'Exportar mis datos', type: 'nav',
-          onPress: () => exportDataMutation.mutate(),
+          id: 'mydata', icon: '📦', label: 'Mis datos (exportar/borrar)', type: 'nav',
+          onPress: () => router.push('/profile/my-data'),
         },
         {
           id: 'privacy', icon: '🔒', label: 'Política de privacidad', type: 'nav',
-          onPress: () => {},
+          onPress: () => router.push('/privacy-policy'),
         },
         {
           id: 'terms', icon: '📄', label: 'Términos de servicio', type: 'nav',
@@ -177,6 +243,18 @@ export default function ProfileScreen() {
     {
       title: 'Soporte',
       items: [
+        {
+          id: 'community', icon: '🤝', label: 'Comunidad y consejos', type: 'nav',
+          onPress: () => router.push('/community'),
+        },
+        {
+          id: 'how_it_works', icon: '🌙', label: 'Cómo funciona Lunara', type: 'nav',
+          onPress: () => router.push('/how-it-works'),
+        },
+        {
+          id: 'share_apk', icon: '📲', label: 'Compartir app (APK)', type: 'nav',
+          onPress: () => router.push('/share-apk'),
+        },
         {
           id: 'help', icon: '❓', label: 'Centro de ayuda', type: 'nav',
           onPress: () => {},
@@ -223,11 +301,22 @@ export default function ProfileScreen() {
             colors={['rgba(139,92,246,0.3)', 'rgba(168,85,247,0.15)']}
             style={styles.userCard}
           >
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>
-                {displayName.charAt(0).toUpperCase()}
-              </Text>
-            </View>
+            <TouchableOpacity
+              style={styles.avatarWrapper}
+              onPress={() => router.push('/profile/avatar')}
+              activeOpacity={0.85}
+            >
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatarPhoto} />
+              ) : (
+                <LinearGradient colors={currentAvatar.gradient} style={styles.avatarCircle}>
+                  <Text style={styles.avatarEmoji}>{currentAvatar.emoji}</Text>
+                </LinearGradient>
+              )}
+              <View style={styles.avatarEditBadge}>
+                <Text style={styles.avatarEditIcon}>✏️</Text>
+              </View>
+            </TouchableOpacity>
             <View style={styles.userInfo}>
               <Text style={styles.userName}>{displayName}</Text>
               <Text style={styles.userEmail}>{user?.email}</Text>
@@ -306,8 +395,32 @@ export default function ProfileScreen() {
           </Animated.View>
         ))}
 
-        {/* ─── App Version ─────────────────────────────── */}
-        <Text style={styles.versionText}>Lunara v1.0.0 · by ShinraCode</Text>
+        {/* ─── ShinraCode Branding ─────────────────────── */}
+        <LinearGradient
+          colors={['rgba(255,255,255,0.04)', 'rgba(139,92,246,0.08)']}
+          style={styles.shinraCard}
+        >
+          <Image source={SHINRA_LOGO} style={styles.shinraLogo} resizeMode="contain" />
+          <Text style={styles.shinraBy}>Programador Yamil.D.Rueda</Text>
+          <Text style={styles.shinraVersion}>Lunara v1.0.0 · ShinraCode</Text>
+          <View style={styles.shinraLinks}>
+            <TouchableOpacity
+              style={styles.shinraLink}
+              onPress={() => Linking.openURL('https://www.instagram.com/ShinraCode')}
+            >
+              <Text style={styles.shinraLinkIcon}>📸</Text>
+              <Text style={styles.shinraLinkText}>@ShinraCode</Text>
+            </TouchableOpacity>
+            <View style={styles.shinraLinkDot} />
+            <TouchableOpacity
+              style={styles.shinraLink}
+              onPress={() => Linking.openURL('https://shinracode.com')}
+            >
+              <Text style={styles.shinraLinkIcon}>🌐</Text>
+              <Text style={styles.shinraLinkText}>shinracode.com</Text>
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
       </ScrollView>
     </LinearGradient>
   )
@@ -325,12 +438,21 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.xl, padding: Spacing.md,
     borderWidth: 1, borderColor: 'rgba(168,85,247,0.3)',
   },
+  avatarWrapper: { position: 'relative' },
   avatarCircle: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: Colors.primary[600], alignItems: 'center', justifyContent: 'center',
+    width: 68, height: 68, borderRadius: 34,
+    alignItems: 'center', justifyContent: 'center',
     ...Shadows.glow,
   },
-  avatarText: { fontSize: Typography.fontSize['2xl'], color: '#fff', fontFamily: Typography.fontFamily.bold },
+  avatarPhoto: { width: 68, height: 68, borderRadius: 34 },
+  avatarEmoji: { fontSize: 36 },
+  avatarEditBadge: {
+    position: 'absolute', bottom: 0, right: -2,
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: Colors.primary[600], alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: Colors.dark.surface,
+  },
+  avatarEditIcon: { fontSize: 10 },
   userInfo: { flex: 1, gap: 4 },
   userName: { fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.bold, color: '#fff' },
   userEmail: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.5)' },
@@ -368,8 +490,24 @@ const styles = StyleSheet.create({
   itemValue: { fontSize: Typography.fontSize.sm, color: Colors.lavender[300] },
   chevron: { fontSize: 20, color: 'rgba(255,255,255,0.3)' },
   itemDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginLeft: 52 },
-  versionText: {
-    textAlign: 'center', fontSize: Typography.fontSize.xs,
-    color: 'rgba(255,255,255,0.2)', marginTop: Spacing.md,
+  shinraCard: {
+    borderRadius: BorderRadius.xl, padding: Spacing.lg,
+    alignItems: 'center', gap: Spacing.xs,
+    borderWidth: 1, borderColor: 'rgba(139,92,246,0.15)',
+    marginTop: Spacing.xs,
+  },
+  shinraLogo: { width: 80, height: 80, marginBottom: 2 },
+  shinraBy: {
+    fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.medium,
+    color: '#e9d5ff',
+  },
+  shinraVersion: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.3)' },
+  shinraLinks: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginTop: 6 },
+  shinraLink: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  shinraLinkIcon: { fontSize: 14 },
+  shinraLinkText: { fontSize: Typography.fontSize.xs, color: Colors.lavender[300], textDecorationLine: 'underline' },
+  shinraLinkDot: {
+    width: 4, height: 4, borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
 })

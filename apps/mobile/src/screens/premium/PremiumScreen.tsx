@@ -211,10 +211,45 @@ export default function PremiumScreen() {
           </Text>
         </Animated.View>
 
-        {/* ─── Feature comparison ──────────────────────── */}
+        {/* ─── Comparison table ────────────────────────── */}
         <Animated.View entering={FadeInDown.delay(300)} style={styles.featuresSection}>
-          <Text style={styles.featuresTitle}>¿Qué incluye Premium?</Text>
+          <Text style={styles.featuresTitle}>Gratis vs Premium</Text>
 
+          <View style={styles.compTable}>
+            {/* Header */}
+            <View style={[styles.compRow, styles.compHeader]}>
+              <Text style={[styles.compCell, styles.compCellFeature, styles.compHeaderText]}>Función</Text>
+              <Text style={[styles.compCell, styles.compCellPlan, styles.compHeaderText]}>Gratis</Text>
+              <Text style={[styles.compCell, styles.compCellPlan, styles.compHeaderText, styles.compPremiumHeader]}>Premium 👑</Text>
+            </View>
+            {[
+              { feature: 'Registro del ciclo', free: '✓', premium: '✓' },
+              { feature: 'Predicción de período', free: '✓', premium: '✓' },
+              { feature: 'Síntomas y estado de ánimo', free: '✓', premium: '✓' },
+              { feature: 'Calendario con emojis', free: '✓', premium: '✓' },
+              { feature: 'Jardín Lunar', free: 'Básico', premium: 'Completo + 2x XP' },
+              { feature: 'Chat con Luna IA', free: '5/mes', premium: 'Ilimitado 🤖' },
+              { feature: 'Informes PDF', free: '✗', premium: '✓' },
+              { feature: 'Análisis de patrones', free: 'Básico', premium: 'Avanzado 📊' },
+              { feature: 'Temperatura basal (BBT)', free: '✗', premium: '✓ 🌡️' },
+              { feature: 'Sincronización en la nube', free: '✗', premium: '✓ ☁️' },
+              { feature: 'Comparación de ciclos', free: '2 ciclos', premium: 'Ilimitado' },
+              { feature: 'Publicidad', free: 'Sí', premium: 'Sin anuncios 🚫' },
+              { feature: 'Modo pareja', free: '✗', premium: '✓ 💑' },
+              { feature: 'Recomendaciones IA', free: '✗', premium: 'Personalizadas 🎯' },
+            ].map((row, i) => (
+              <View key={i} style={[styles.compRow, i % 2 === 0 && styles.compRowEven]}>
+                <Text style={[styles.compCell, styles.compCellFeature]}>{row.feature}</Text>
+                <Text style={[styles.compCell, styles.compCellPlan, styles.compFreeText]}>{row.free}</Text>
+                <Text style={[styles.compCell, styles.compCellPlan, styles.compPremiumText]}>{row.premium}</Text>
+              </View>
+            ))}
+          </View>
+        </Animated.View>
+
+        {/* ─── Feature list ────────────────────────────── */}
+        <Animated.View entering={FadeInDown.delay(400)} style={styles.featuresSection}>
+          <Text style={styles.featuresTitle}>Todo incluido en Premium</Text>
           <View style={styles.featuresCard}>
             {FEATURES_PREMIUM.map((feature, i) => (
               <View key={i} style={styles.featureRow}>
@@ -332,6 +367,20 @@ const styles = StyleSheet.create({
   featureRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
   featureCheck: { color: Colors.lavender[400], fontFamily: Typography.fontFamily.bold, width: 16 },
   featureText: { flex: 1, fontSize: Typography.fontSize.base, color: '#e9d5ff' },
+  compTable: {
+    borderRadius: BorderRadius.xl, overflow: 'hidden',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+  },
+  compRow: { flexDirection: 'row' },
+  compRowEven: { backgroundColor: 'rgba(255,255,255,0.04)' },
+  compHeader: { backgroundColor: 'rgba(139,92,246,0.3)' },
+  compHeaderText: { fontFamily: Typography.fontFamily.bold, color: '#fff', fontSize: Typography.fontSize.xs },
+  compCell: { paddingVertical: 8, paddingHorizontal: 6 },
+  compCellFeature: { flex: 2, fontSize: 11, color: 'rgba(255,255,255,0.7)', borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.08)' },
+  compCellPlan: { flex: 1, textAlign: 'center', fontSize: 11 },
+  compFreeText: { color: 'rgba(255,255,255,0.4)' },
+  compPremiumText: { color: '#e9d5ff', fontFamily: Typography.fontFamily.medium },
+  compPremiumHeader: { color: Colors.gold.main },
   testimonialsSection: { marginBottom: Spacing.xl },
   testimonialCard: {
     backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: BorderRadius.xl,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, Dimensions, ActivityIndicator,
@@ -14,6 +14,7 @@ import isBetween from 'dayjs/plugin/isBetween'
 import { router } from 'expo-router'
 
 import { useCalendar } from '@/api/hooks/useCycle'
+import { useSymptomStore } from '@/store'
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '@/theme'
 
 dayjs.extend(weekday)
@@ -24,6 +25,19 @@ const { width } = Dimensions.get('window')
 const DAY_SIZE = (width - Spacing.md * 2 - Spacing.sm * 6) / 7
 
 const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
+
+const MOOD_ICONS: Record<string, string> = {
+  HAPPY: '😊', RELAXED: '😌', SAD: '😢', ANXIOUS: '😰',
+  STRESSED: '😤', TIRED: '😴', ENERGETIC: '⚡', EMOTIONAL: '🥺',
+  IRRITABLE: '😠', MOTIVATED: '💪', NEUTRAL: '😐',
+}
+
+const ICON_LABELS: Record<string, string> = {
+  '🩸': 'Período', '😊': 'Humor', '😌': 'Humor', '😢': 'Humor',
+  '😰': 'Humor', '😤': 'Humor', '😴': 'Sueño', '⚡': 'Humor',
+  '🥺': 'Humor', '😠': 'Humor', '🤩': 'Humor', '😐': 'Humor',
+  '💊': 'Síntomas', '💧': 'Agua', '❤️': 'Intimidad', '📝': 'Nota',
+}
 
 const DAY_COLORS: Record<string, { bg: string; border: string; label: string; emoji: string }> = {
   period: { bg: Colors.rose[500] + 'CC', border: Colors.rose[500], label: 'Menstruación', emoji: '🌑' },
@@ -39,8 +53,37 @@ export default function CalendarScreen() {
   const [currentMonth, setCurrentMonth] = useState(dayjs())
 
   const { data, isLoading } = useCalendar(currentMonth.year(), currentMonth.month() + 1)
+  const { logs } = useSymptomStore()
+
+  // Build a map of date → icons to show in the cell
+  const loggedDates = React.useMemo(() => {
+    const map: Record<string, string[]> = {}
+    logs.forEach((l) => {
+      const icons: string[] = []
+      if (l.phase === 'menstrual') icons.push('🩸')
+      if (l.mood) icons.push(MOOD_ICONS[l.mood] ?? '😊')
+      if (l.symptoms.length > 0) icons.push('💊')
+      if (l.sleep) icons.push('😴')
+      if (l.water && l.water > 0) icons.push('💧')
+      if (l.intimacy) icons.push('❤️')
+      if (l.notes && l.notes.trim()) icons.push('📝')
+      if (icons.length > 0) map[l.date] = icons.slice(0, 4)
+    })
+    return map
+  }, [logs])
 
   const days = data?.days as Record<string, { type: string; intensity?: string }> ?? {}
+
+  // Merge API cycle data with local period logs
+  const mergedDays = React.useMemo(() => {
+    const merged = { ...days }
+    Object.entries(loggedDates).forEach(([date, icons]) => {
+      if (icons.includes('🩸') && !merged[date]) {
+        merged[date] = { type: 'period' }
+      }
+    })
+    return merged
+  }, [days, loggedDates])
 
   const startOfMonth = currentMonth.startOf('month')
   const daysInMonth = currentMonth.daysInMonth()
@@ -94,6 +137,13 @@ export default function CalendarScreen() {
               <Text style={styles.legendText}>{val.label}</Text>
             </View>
           ))}
+          <View style={styles.legendDivider} />
+          {[['🩸','Período'],['😊','Humor'],['💊','Síntomas'],['😴','Sueño'],['💧','Agua'],['❤️','Intimidad'],['📝','Nota']].map(([icon, label]) => (
+            <View key={icon} style={styles.legendItem}>
+              <Text style={styles.legendEmoji}>{icon}</Text>
+              <Text style={styles.legendText}>{label}</Text>
+            </View>
+          ))}
         </Animated.View>
 
         {/* ─── Calendar Grid ─────────────────────────────── */}
@@ -116,10 +166,11 @@ export default function CalendarScreen() {
                   return <View key={`empty-${i}`} style={styles.dayCell} />
                 }
 
-                const dayType = days[item.date]?.type || 'normal'
+                const dayType = mergedDays[item.date]?.type || 'normal'
                 const dayStyle = DAY_COLORS[dayType] || DAY_COLORS.normal
                 const isSelected = selectedDate === item.date
                 const today = isToday(item.date)
+                const icons = loggedDates[item.date]
 
                 return (
                   <TouchableOpacity
@@ -140,8 +191,13 @@ export default function CalendarScreen() {
                     ]}>
                       {item.dayNum}
                     </Text>
-                    {dayType !== 'normal' && (
-                      <Text style={styles.dayEmoji}>{dayStyle.emoji}</Text>
+                    {icons && icons.length > 0 && (
+                      <View style={styles.iconRow}>
+                        <Text style={styles.iconText}>{icons.slice(0, 2).join('')}</Text>
+                        {icons.length > 2 && (
+                          <Text style={styles.iconText}>{icons.slice(2, 4).join('')}</Text>
+                        )}
+                      </View>
                     )}
                   </TouchableOpacity>
                 )
@@ -156,29 +212,47 @@ export default function CalendarScreen() {
             <Text style={styles.selectedDateText}>
               {dayjs(selectedDate).format('dddd, D [de] MMMM')}
             </Text>
-            {selectedDayInfo ? (
+
+            {/* Cycle phase info from API */}
+            {selectedDayInfo && (
               <View style={styles.selectedDayDetail}>
                 <Text style={styles.selectedDayEmoji}>
                   {DAY_COLORS[selectedDayInfo.type]?.emoji || '📅'}
                 </Text>
-                <Text style={styles.selectedDayLabel}>
-                  {DAY_COLORS[selectedDayInfo.type]?.label || 'Sin datos'}
-                </Text>
-                {selectedDayInfo.intensity && (
-                  <Text style={styles.intensityLabel}>
-                    Intensidad: {INTENSITY_LABELS[selectedDayInfo.intensity] || selectedDayInfo.intensity}
+                <View>
+                  <Text style={styles.selectedDayLabel}>
+                    {DAY_COLORS[selectedDayInfo.type]?.label || 'Sin datos'}
                   </Text>
-                )}
+                  {selectedDayInfo.intensity && (
+                    <Text style={styles.intensityLabel}>
+                      Intensidad: {INTENSITY_LABELS[selectedDayInfo.intensity] || selectedDayInfo.intensity}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            )}
+
+            {/* Logged icons summary */}
+            {loggedDates[selectedDate] ? (
+              <View style={styles.iconSummaryRow}>
+                {loggedDates[selectedDate].map((icon, i) => (
+                  <View key={i} style={styles.iconChip}>
+                    <Text style={styles.iconChipEmoji}>{icon}</Text>
+                    <Text style={styles.iconChipLabel}>{ICON_LABELS[icon] ?? ''}</Text>
+                  </View>
+                ))}
               </View>
             ) : (
-              <Text style={styles.noDayData}>Sin registros para este día</Text>
+              !selectedDayInfo && <Text style={styles.noDayData}>Sin registros para este día</Text>
             )}
 
             <TouchableOpacity
               style={styles.logDayBtn}
-              onPress={() => router.push({ pathname: '/cycle/log', params: { date: selectedDate } })}
+              onPress={() => router.push({ pathname: '/(tabs)/log', params: { date: selectedDate } })}
             >
-              <Text style={styles.logDayBtnText}>+ Registrar este día</Text>
+              <Text style={styles.logDayBtnText}>
+                {loggedDates[selectedDate] ? '✏️ Editar registro' : '+ Registrar este día'}
+              </Text>
             </TouchableOpacity>
           </Animated.View>
         )}
@@ -283,7 +357,9 @@ const styles = StyleSheet.create({
   },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendDot: { width: 10, height: 10, borderRadius: 5, borderWidth: 1 },
+  legendEmoji: { fontSize: 11 },
   legendText: { fontSize: Typography.fontSize.xs, color: Colors.dark.muted },
+  legendDivider: { width: '100%', height: 1, backgroundColor: Colors.dark.border, marginVertical: 2 },
   calendarCard: {
     marginHorizontal: Spacing.md,
     backgroundColor: Colors.dark.card,
@@ -305,11 +381,12 @@ const styles = StyleSheet.create({
   daysGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm / 2 },
   dayCell: {
     width: DAY_SIZE,
-    height: DAY_SIZE,
+    height: DAY_SIZE + 10,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: BorderRadius.sm,
     margin: 1,
+    paddingVertical: 2,
   },
   todayCell: {
     borderWidth: 2,
@@ -328,7 +405,8 @@ const styles = StyleSheet.create({
   },
   todayNum: { color: Colors.gold.main, fontFamily: Typography.fontFamily.bold },
   markedDayNum: { color: '#fff', fontFamily: Typography.fontFamily.bold },
-  dayEmoji: { fontSize: 8, marginTop: -2 },
+  iconRow: { alignItems: 'center', marginTop: 1 },
+  iconText: { fontSize: 8, lineHeight: 10 },
   selectedInfo: {
     margin: Spacing.md,
     backgroundColor: Colors.dark.card,
@@ -345,6 +423,17 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   selectedDayDetail: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.sm },
+  iconSummaryRow: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.sm,
+  },
+  iconChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: Colors.dark.surface, borderRadius: BorderRadius.full,
+    paddingHorizontal: 8, paddingVertical: 4,
+    borderWidth: 1, borderColor: Colors.dark.border,
+  },
+  iconChipEmoji: { fontSize: 14 },
+  iconChipLabel: { fontSize: Typography.fontSize.xs, color: Colors.dark.muted },
   selectedDayEmoji: { fontSize: 28 },
   selectedDayLabel: {
     fontSize: Typography.fontSize.base,

@@ -1,12 +1,7 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useState, useEffect } from 'react'
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Dimensions,
-  RefreshControl,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  Dimensions, RefreshControl, Switch, Image, Share, Alert,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -17,13 +12,17 @@ import Animated, {
   withSpring,
   FadeInDown,
 } from 'react-native-reanimated'
+import * as Haptics from 'expo-haptics'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 import relativeTime from 'dayjs/plugin/relativeTime'
 
-import { useAuthStore, useCycleStore, useGardenStore } from '@/store'
+import { useAuthStore, useCycleStore, useGardenStore, useSettingsStore, useSymptomStore } from '@/store'
+import { AVATARS } from '@/constants/avatars'
 import { useCurrentCycle } from '@/api/hooks/useCycle'
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '@/theme'
+import QuickLogSheet from '@/components/QuickLogSheet'
+import { updateWidgetFromCycleData } from '@/utils/widgetBridge'
 
 dayjs.extend(relativeTime)
 dayjs.locale('es')
@@ -70,7 +69,29 @@ export default function HomeScreen() {
   const { user } = useAuthStore()
   const cycleStore = useCycleStore()
   const { stage, xp, crystalBalance, currentStreak } = useGardenStore()
+  const { ttcMode, setTtcMode, avatarId, avatarUri } = useSettingsStore()
+  const currentAvatar = AVATARS.find((a) => a.id === avatarId) ?? AVATARS[0]
+  const { getTodayLog, getStreak } = useSymptomStore()
   const { data: cycleData, isLoading, refetch } = useCurrentCycle()
+  const { updateLog } = useSymptomStore()
+  const [quickLogVisible, setQuickLogVisible] = useState(false)
+  const [periodStarted, setPeriodStarted] = useState(false)
+  const todayLog = getTodayLog()
+  const logStreak = getStreak()
+
+  const handlePeriodStart = (intensity: string) => {
+    const today = dayjs().format('YYYY-MM-DD')
+    updateLog(today, 'menstrual', {
+      phase: 'menstrual',
+      flowIntensity: intensity,
+      mood: todayLog?.mood ?? null,
+      energy: todayLog?.energy ?? null,
+      symptoms: todayLog?.symptoms ?? [],
+    } as any)
+    cycleStore.setCurrentCycle({ currentPhase: 'menstrual', isInPeriod: true })
+    setPeriodStarted(true)
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+  }
 
   const phase = cycleStore.currentPhase || 'follicular'
   const phaseInfo = PHASE_INFO[phase]
@@ -78,6 +99,43 @@ export default function HomeScreen() {
   const daysUntilPeriod = cycleStore.nextPeriodDate
     ? dayjs(cycleStore.nextPeriodDate).diff(dayjs(), 'day')
     : null
+
+  useEffect(() => {
+    if (cycleStore.dayOfCycle) {
+      updateWidgetFromCycleData({
+        phase,
+        dayOfCycle: cycleStore.dayOfCycle,
+        cycleLength: cycleData?.cycleLength ?? 28,
+      })
+    }
+  }, [phase, cycleStore.dayOfCycle, cycleData])
+
+  const handleShareCycle = async () => {
+    const phaseLabels: Record<string, string> = {
+      menstrual: 'Menstrual 🌑', follicular: 'Folicular 🌒',
+      ovulatory: 'Ovulatoria 🌕', luteal: 'Lútea 🌗',
+    }
+    const phaseText = phaseLabels[phase] ?? phase
+    const dayText = cycleStore.dayOfCycle ? `Día ${cycleStore.dayOfCycle}` : ''
+    const periodText = daysUntilPeriod !== null
+      ? (daysUntilPeriod === 0 ? 'mi período es hoy' : `mi período llega en ${daysUntilPeriod} días`)
+      : ''
+
+    const message = [
+      `🌙 Estoy en la fase ${phaseText} de mi ciclo lunar${dayText ? ` · ${dayText}` : ''}`,
+      periodText ? `📅 ${periodText.charAt(0).toUpperCase() + periodText.slice(1)}` : '',
+      `🔥 Racha de ${currentStreak} días registrando`,
+      '',
+      'Hago seguimiento de mi salud femenina con Lunara ✨',
+      '#Lunara #SaludFemenina #CicloMenstrual',
+    ].filter(Boolean).join('\n')
+
+    try {
+      await Share.share({ message })
+    } catch {
+      Alert.alert('No se pudo compartir')
+    }
+  }
 
   const greeting = () => {
     const hour = new Date().getHours()
@@ -110,9 +168,20 @@ export default function HomeScreen() {
         style={[styles.header, { paddingTop: insets.top + 16 }]}
       >
         {/* Greeting */}
-        <Animated.View entering={FadeInDown.delay(0)}>
-          <Text style={styles.greeting}>{greeting()}, {user?.profile?.firstName || 'Luna'} ✨</Text>
-          <Text style={styles.date}>{dayjs().format('dddd, D [de] MMMM')}</Text>
+        <Animated.View entering={FadeInDown.delay(0)} style={styles.greetingRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.greeting}>{greeting()}, {user?.profile?.firstName || 'Luna'} ✨</Text>
+            <Text style={styles.date}>{dayjs().format('dddd, D [de] MMMM')}</Text>
+          </View>
+          <TouchableOpacity onPress={() => router.push('/profile')} style={styles.avatarBtn} activeOpacity={0.8}>
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.avatarPhoto} />
+            ) : (
+              <LinearGradient colors={currentAvatar.gradient} style={styles.avatarCircle}>
+                <Text style={styles.avatarEmoji}>{currentAvatar.emoji}</Text>
+              </LinearGradient>
+            )}
+          </TouchableOpacity>
         </Animated.View>
 
         {/* Phase Card */}
@@ -143,7 +212,7 @@ export default function HomeScreen() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{currentStreak}🔥</Text>
+            <Text style={styles.statValue}>{logStreak > 0 ? logStreak : currentStreak}🔥</Text>
             <Text style={styles.statLabel}>Racha</Text>
           </View>
           <View style={styles.statDivider} />
@@ -154,6 +223,172 @@ export default function HomeScreen() {
         </Animated.View>
       </LinearGradient>
 
+      {/* ─── Quick Log (registro rápido del día) ──────────── */}
+      <Animated.View entering={FadeInDown.delay(250)} style={styles.section}>
+        <TouchableOpacity
+          style={[styles.quickLogBtn, todayLog && styles.quickLogBtnDone]}
+          onPress={() => setQuickLogVisible(true)}
+          activeOpacity={0.85}
+        >
+          <LinearGradient
+            colors={todayLog ? ['#10b981', '#059669'] : [Colors.primary[700], Colors.primary[500]]}
+            style={styles.quickLogGradient}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          >
+            <View style={styles.quickLogContent}>
+              <Text style={styles.quickLogEmoji}>{todayLog ? '✅' : '📝'}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.quickLogTitle}>
+                  {todayLog ? 'Registro de hoy completo' : 'Registra cómo estás hoy'}
+                </Text>
+                <Text style={styles.quickLogSub}>
+                  {todayLog
+                    ? `${todayLog.mood ?? ''} ${todayLog.energy ? `· Energía ${todayLog.energy}` : ''} ${todayLog.symptoms.length > 0 ? `· ${todayLog.symptoms.length} síntoma${todayLog.symptoms.length > 1 ? 's' : ''}` : ''}`
+                    : 'Ánimo, energía y síntomas en 10 segundos · +10 XP'}
+                </Text>
+              </View>
+              <Text style={styles.quickLogArrow}>{todayLog ? '✏️' : '→'}</Text>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      </Animated.View>
+
+      {/* ─── Period Start Card ─────────────────────────────── */}
+      {phase !== 'menstrual' && !cycleStore.isInPeriod && !periodStarted && (
+        <Animated.View entering={FadeInDown.delay(255)} style={styles.section}>
+          <LinearGradient
+            colors={['rgba(190,24,93,0.2)', 'rgba(244,63,94,0.12)']}
+            style={styles.periodStartCard}
+          >
+            <View style={styles.periodStartHeader}>
+              <Text style={styles.periodStartEmoji}>🩸</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.periodStartTitle}>¿Empezó tu período hoy?</Text>
+                <Text style={styles.periodStartSub}>Regístralo en un toque</Text>
+              </View>
+            </View>
+            <View style={styles.periodStartBtns}>
+              {[
+                { key: 'spotting', label: 'Manchado', color: '#fca5a5' },
+                { key: 'light',    label: 'Ligero',   color: '#f87171' },
+                { key: 'medium',   label: 'Moderado', color: '#ef4444' },
+                { key: 'heavy',    label: 'Abundante', color: '#b91c1c' },
+              ].map((opt) => (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[styles.periodStartBtn, { borderColor: opt.color + '80' }]}
+                  onPress={() => handlePeriodStart(opt.key)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.periodStartBtnText, { color: opt.color }]}>{opt.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </LinearGradient>
+        </Animated.View>
+      )}
+
+      {periodStarted && (
+        <Animated.View entering={FadeInDown} style={styles.section}>
+          <LinearGradient
+            colors={['rgba(190,24,93,0.25)', 'rgba(244,63,94,0.15)']}
+            style={[styles.periodStartCard, { alignItems: 'center' }]}
+          >
+            <Text style={{ fontSize: 28 }}>❤️</Text>
+            <Text style={styles.periodStartTitle}>¡Período registrado!</Text>
+            <Text style={styles.periodStartSub}>Cuídate mucho hoy 🌙</Text>
+          </LinearGradient>
+        </Animated.View>
+      )}
+
+      {/* ─── Streak Banner ─────────────────────────────────── */}
+      {logStreak >= 3 && (
+        <Animated.View entering={FadeInDown.delay(265)} style={styles.section}>
+          <LinearGradient
+            colors={['rgba(251,191,36,0.25)', 'rgba(245,158,11,0.15)']}
+            style={styles.streakBanner}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          >
+            <Text style={styles.streakFire}>🔥</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.streakTitle}>¡{logStreak} días seguidos!</Text>
+              <Text style={styles.streakSub}>
+                {logStreak >= 30 ? '¡Increíble! Un mes registrando 🏆' :
+                 logStreak >= 14 ? '¡Dos semanas seguidas! Sigue así 💪' :
+                 logStreak >= 7 ? '¡Una semana! Tu jardín florece 🌸' :
+                 'Tu racha crece — ¡no la rompas! ✨'}
+              </Text>
+            </View>
+            <Text style={styles.streakXp}>+{logStreak * 2} XP</Text>
+          </LinearGradient>
+        </Animated.View>
+      )}
+
+      {/* ─── Garden / XP Progress ─────────────────────────── */}
+      <Animated.View entering={FadeInDown.delay(272)} style={styles.section}>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/garden')} activeOpacity={0.85}>
+          <LinearGradient
+            colors={['rgba(139,92,246,0.2)', 'rgba(168,85,247,0.12)']}
+            style={styles.gardenCard}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          >
+            <Text style={styles.gardenStageEmoji}>
+              {stage === 'SEED' ? '🌱' : stage === 'SPROUT' ? '🌿' : stage === 'FLOWER' ? '🌸' : '🌕'}
+            </Text>
+            <View style={{ flex: 1, gap: 4 }}>
+              <View style={styles.gardenTitleRow}>
+                <Text style={styles.gardenTitle}>{GARDEN_LABELS[stage]}</Text>
+                <Text style={styles.gardenXp}>Nivel {Math.floor(xp / 200) + 1} · {xp} XP</Text>
+              </View>
+              <View style={styles.xpBarBg}>
+                <LinearGradient
+                  colors={[Colors.primary[500], Colors.lavender[400]]}
+                  style={[styles.xpBarFill, { width: `${Math.min(100, (xp % 200) / 2)}%` }]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                />
+              </View>
+              <Text style={styles.gardenSub}>{200 - (xp % 200)} XP para el siguiente nivel · {crystalBalance} 💎</Text>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      </Animated.View>
+
+      {/* ─── PDF Quick CTA ─────────────────────────────────── */}
+      <Animated.View entering={FadeInDown.delay(276)} style={styles.section}>
+        <TouchableOpacity onPress={() => router.push('/insights/pdf-report')} activeOpacity={0.85}>
+          <LinearGradient
+            colors={['rgba(99,102,241,0.18)', 'rgba(139,92,246,0.1)']}
+            style={styles.pdfCard}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          >
+            <Text style={styles.pdfEmoji}>📄</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pdfTitle}>Reporte para tu ginecóloga</Text>
+              <Text style={styles.pdfSub}>PDF con síntomas, sueño, BBT y más · Gratis</Text>
+            </View>
+            <Text style={styles.pdfArrow}>→</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </Animated.View>
+
+      {/* ─── Share card ────────────────────────────────────── */}
+      <Animated.View entering={FadeInDown.delay(280)} style={styles.section}>
+        <TouchableOpacity onPress={handleShareCycle} activeOpacity={0.85}>
+          <LinearGradient
+            colors={['rgba(139,92,246,0.25)', 'rgba(219,39,119,0.2)']}
+            style={styles.shareCard}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          >
+            <Text style={styles.shareEmoji}>🌙</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.shareTitle}>Comparte tu ciclo</Text>
+              <Text style={styles.shareSub}>Fase {phaseInfo.label} · Día {cycleStore.dayOfCycle ?? '—'}</Text>
+            </View>
+            <Text style={styles.shareArrow}>↗</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </Animated.View>
+
       {/* ─── Quick Actions ─────────────────────────────────── */}
       <Animated.View entering={FadeInDown.delay(300)} style={styles.section}>
         <Text style={styles.sectionTitle}>Acciones rápidas</Text>
@@ -161,19 +396,13 @@ export default function HomeScreen() {
           <QuickAction
             emoji="🌙"
             label="Registrar período"
-            onPress={() => router.push('/cycle/log')}
+            onPress={() => router.push('/(tabs)/log')}
             color={Colors.primary[500]}
           />
           <QuickAction
-            emoji="😊"
-            label="Estado de ánimo"
-            onPress={() => router.push('/cycle/mood')}
-            color={Colors.rose[500]}
-          />
-          <QuickAction
-            emoji="🌡️"
-            label="Síntomas"
-            onPress={() => router.push('/cycle/symptoms')}
+            emoji="🌍"
+            label="Comunidad"
+            onPress={() => router.push('/community')}
             color={Colors.gold.main}
           />
           <QuickAction
@@ -182,6 +411,65 @@ export default function HomeScreen() {
             onPress={() => router.push('/ai-chat')}
             color={Colors.lavender[500]}
           />
+          <QuickAction
+            emoji="📊"
+            label="Mis patrones"
+            onPress={() => router.push('/(tabs)/insights')}
+            color={Colors.rose[500]}
+          />
+        </View>
+      </Animated.View>
+
+      {/* ─── TTC Mode ──────────────────────────────────────── */}
+      <Animated.View entering={FadeInDown.delay(350)} style={styles.section}>
+        <View style={styles.ttcCard}>
+          <LinearGradient
+            colors={ttcMode ? ['#059669', '#10b981'] : [Colors.dark.card, Colors.dark.card]}
+            style={styles.ttcGradient}
+          >
+            <View style={styles.ttcHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.ttcTitle}>🥚 Modo Búsqueda de Embarazo</Text>
+                <Text style={styles.ttcSub}>
+                  {ttcMode
+                    ? 'Activo · Registra temperatura basal y moco cervical'
+                    : 'Activa para seguimiento de fertilidad avanzado'}
+                </Text>
+              </View>
+              <Switch
+                value={ttcMode}
+                onValueChange={setTtcMode}
+                trackColor={{ false: Colors.dark.border, true: Colors.success + '80' }}
+                thumbColor={ttcMode ? Colors.success : Colors.dark.muted}
+              />
+            </View>
+            {ttcMode && (
+              <View style={styles.ttcInfo}>
+                {cycleStore.fertileWindowStart && (
+                  <View style={styles.ttcRow}>
+                    <Text style={styles.ttcRowIcon}>🌟</Text>
+                    <Text style={styles.ttcRowText}>
+                      Ventana fértil: {dayjs(cycleStore.fertileWindowStart).format('D MMM')} – {dayjs(cycleStore.fertileWindowEnd).format('D MMM')}
+                    </Text>
+                  </View>
+                )}
+                {cycleStore.nextOvulationDate && (
+                  <View style={styles.ttcRow}>
+                    <Text style={styles.ttcRowIcon}>🥚</Text>
+                    <Text style={styles.ttcRowText}>
+                      Ovulación estimada: {dayjs(cycleStore.nextOvulationDate).format('D [de] MMMM')}
+                    </Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.ttcLogBtn}
+                  onPress={() => router.push('/(tabs)/log')}
+                >
+                  <Text style={styles.ttcLogBtnText}>Registrar temperatura y moco →</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </LinearGradient>
         </View>
       </Animated.View>
 
@@ -221,26 +509,28 @@ export default function HomeScreen() {
       </Animated.View>
 
       {/* ─── Fertility Forecast ────────────────────────────── */}
-      {cycleStore.fertilityWindowStart && (
+      {cycleStore.fertileWindowStart && !ttcMode && (
         <Animated.View entering={FadeInDown.delay(600)} style={styles.section}>
           <Text style={styles.sectionTitle}>Ventana fértil</Text>
           <View style={styles.fertilityCard}>
             <Text style={styles.fertilityEmoji}>🥚</Text>
             <View>
               <Text style={styles.fertilityText}>
-                {dayjs(cycleStore.fertilityWindowStart).format('D MMM')} –{' '}
-                {dayjs(cycleStore.fertilityWindowEnd).format('D MMM')}
+                {dayjs(cycleStore.fertileWindowStart).format('D MMM')} –{' '}
+                {dayjs(cycleStore.fertileWindowEnd).format('D MMM')}
               </Text>
               <Text style={styles.fertilityMuted}>
                 Ovulación: {dayjs(cycleStore.nextOvulationDate).format('D [de] MMMM')}
               </Text>
               <Text style={styles.confidenceText}>
-                Confianza: {Math.round((cycleStore.predictionConfidence || 0) * 100)}%
+                Confianza: {cycleStore.predictionConfidence}%
               </Text>
             </View>
           </View>
         </Animated.View>
       )}
+
+      <QuickLogSheet visible={quickLogVisible} onClose={() => setQuickLogVisible(false)} />
     </ScrollView>
   )
 }
@@ -279,6 +569,19 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: BorderRadius['2xl'],
     borderBottomRightRadius: BorderRadius['2xl'],
   },
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  avatarBtn: { marginLeft: Spacing.sm },
+  avatarCircle: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)',
+  },
+  avatarPhoto: { width: 40, height: 40, borderRadius: 20 },
+  avatarEmoji: { fontSize: 20 },
   greeting: {
     fontSize: Typography.fontSize.xl,
     fontFamily: Typography.fontFamily.bold,
@@ -289,7 +592,6 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSize.sm,
     color: 'rgba(255,255,255,0.75)',
     textTransform: 'capitalize',
-    marginBottom: Spacing.md,
   },
   phaseCard: {
     backgroundColor: 'rgba(255,255,255,0.15)',
@@ -475,4 +777,122 @@ const styles = StyleSheet.create({
     color: Colors.lavender[400],
     marginTop: 4,
   },
+  // Quick log
+  quickLogBtn: {
+    borderRadius: BorderRadius.xl,
+    overflow: 'hidden',
+    ...Shadows.md,
+  },
+  quickLogBtnDone: {},
+  quickLogGradient: { borderRadius: BorderRadius.xl },
+  quickLogContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  quickLogEmoji: { fontSize: 28 },
+  quickLogTitle: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.bold,
+    color: '#fff',
+  },
+  quickLogSub: {
+    fontSize: Typography.fontSize.xs,
+    color: 'rgba(255,255,255,0.75)',
+    marginTop: 2,
+  },
+  quickLogArrow: { fontSize: 18, color: 'rgba(255,255,255,0.8)' },
+  // TTC
+  ttcCard: { borderRadius: BorderRadius.xl, overflow: 'hidden', ...Shadows.md },
+  ttcGradient: { padding: Spacing.md, borderRadius: BorderRadius.xl, borderWidth: 1, borderColor: Colors.dark.border },
+  ttcHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  ttcTitle: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.bold,
+    color: Colors.dark.text,
+  },
+  ttcSub: {
+    fontSize: Typography.fontSize.xs,
+    color: Colors.dark.muted,
+    marginTop: 2,
+  },
+  ttcInfo: { marginTop: Spacing.md, gap: Spacing.sm },
+  ttcRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  ttcRowIcon: { fontSize: 16 },
+  ttcRowText: { fontSize: Typography.fontSize.sm, color: '#fff', flex: 1 },
+  ttcLogBtn: {
+    marginTop: Spacing.sm,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.sm,
+    alignItems: 'center',
+  },
+  ttcLogBtnText: {
+    color: '#fff',
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.bold,
+  },
+  shareCard: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    borderRadius: BorderRadius.xl, padding: Spacing.md,
+    borderWidth: 1, borderColor: 'rgba(139,92,246,0.35)',
+  },
+  shareEmoji: { fontSize: 28 },
+  shareTitle: {
+    fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold,
+    color: '#fff',
+  },
+  shareSub: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.55)', marginTop: 2 },
+  shareArrow: { fontSize: 20, color: Colors.lavender[400] },
+  periodStartCard: {
+    borderRadius: BorderRadius.xl, padding: Spacing.md,
+    borderWidth: 1, borderColor: 'rgba(244,63,94,0.3)', gap: Spacing.md,
+  },
+  periodStartHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  periodStartEmoji: { fontSize: 28 },
+  periodStartTitle: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: '#fda4af' },
+  periodStartSub: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
+  periodStartBtns: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  periodStartBtn: {
+    paddingHorizontal: Spacing.md, paddingVertical: 8,
+    borderRadius: BorderRadius.xl, borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  periodStartBtnText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.medium },
+  streakBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    borderRadius: BorderRadius.xl, padding: Spacing.md,
+    borderWidth: 1, borderColor: 'rgba(251,191,36,0.4)',
+  },
+  streakFire: { fontSize: 32 },
+  streakTitle: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: '#fde68a' },
+  streakSub: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
+  streakXp: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold, color: '#fbbf24' },
+  // Garden card
+  gardenCard: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    borderRadius: BorderRadius.xl, padding: Spacing.md,
+    borderWidth: 1, borderColor: 'rgba(139,92,246,0.35)',
+  },
+  gardenStageEmoji: { fontSize: 32 },
+  gardenTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  gardenTitle: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: '#c4b5fd' },
+  gardenXp: { fontSize: Typography.fontSize.xs, color: Colors.lavender[400] },
+  xpBarBg: {
+    height: 6, backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: BorderRadius.full, overflow: 'hidden',
+  },
+  xpBarFill: { height: '100%', borderRadius: BorderRadius.full },
+  gardenSub: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.45)', marginTop: 1 },
+  // PDF card
+  pdfCard: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    borderRadius: BorderRadius.xl, padding: Spacing.md,
+    borderWidth: 1, borderColor: 'rgba(99,102,241,0.3)',
+  },
+  pdfEmoji: { fontSize: 26 },
+  pdfTitle: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: '#e0e7ff' },
+  pdfSub: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
+  pdfArrow: { fontSize: 18, color: '#818cf8' },
 })
