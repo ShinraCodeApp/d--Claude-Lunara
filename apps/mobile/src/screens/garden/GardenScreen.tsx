@@ -10,7 +10,7 @@ import Animated, {
   useAnimatedStyle, useSharedValue, withRepeat,
   withSequence, withTiming, FadeInDown, ZoomIn, Easing,
 } from 'react-native-reanimated'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import * as Haptics from 'expo-haptics'
 
 import apiClient from '@/api/client'
@@ -65,8 +65,9 @@ const SHOP_ITEMS = [
 
 export default function GardenScreen() {
   const insets = useSafeAreaInsets()
-  const { stage, xp, level, crystalBalance, setGarden } = useGardenStore()
+  const { stage, xp, level, crystalBalance, setGarden, spendCrystals, earnCrystals } = useGardenStore()
   const stageInfo = GARDEN_STAGES[stage]
+  const [purchasedItems, setPurchasedItems] = React.useState<Set<string>>(new Set())
 
   // Floating animation for garden emoji
   const floatY = useSharedValue(0)
@@ -119,6 +120,25 @@ export default function GardenScreen() {
         currentStreak: data.streak?.currentStreak ?? 0,
         longestStreak: data.streak?.longestStreak ?? 0,
       })
+    },
+  })
+
+  const purchaseMutation = useMutation({
+    mutationFn: async (item: (typeof SHOP_ITEMS)[0]) => {
+      await apiClient.post('/garden/spend', { amount: item.cost, description: item.name })
+      return item
+    },
+    onMutate: (item) => {
+      spendCrystals(item.cost)
+    },
+    onSuccess: (item) => {
+      setPurchasedItems((prev) => new Set([...prev, item.id]))
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      refetch()
+    },
+    onError: (_err, item) => {
+      earnCrystals(item.cost) // rollback optimistic spend
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
     },
   })
 
@@ -259,22 +279,31 @@ export default function GardenScreen() {
           <View style={styles.shopGrid}>
             {SHOP_ITEMS.map((item) => {
               const canAfford = crystalBalance >= item.cost
+              const isPurchased = purchasedItems.has(item.id)
+              const isBuying = purchaseMutation.isPending && purchaseMutation.variables?.id === item.id
               return (
                 <TouchableOpacity
                   key={item.id}
-                  style={[styles.shopItem, !canAfford && styles.shopItemDisabled]}
+                  style={[
+                    styles.shopItem,
+                    (!canAfford || isPurchased) && styles.shopItemDisabled,
+                  ]}
                   onPress={() => {
-                    if (!canAfford) return
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-                    // TODO: apiClient.post('/garden/purchase', { itemId: item.id })
+                    if (!canAfford || isPurchased || isBuying) return
+                    purchaseMutation.mutate(item)
                   }}
+                  disabled={isBuying}
                 >
-                  <Text style={styles.shopEmoji}>{item.emoji}</Text>
+                  <Text style={styles.shopEmoji}>{isPurchased ? '✅' : item.emoji}</Text>
                   <Text style={styles.shopName}>{item.name}</Text>
                   <View style={styles.shopCost}>
-                    <Text style={[styles.shopCostText, !canAfford && styles.shopCostInsufficient]}>
-                      {item.cost} 💎
-                    </Text>
+                    {isPurchased ? (
+                      <Text style={[styles.shopCostText, { color: Colors.lavender[400] }]}>Obtenido</Text>
+                    ) : (
+                      <Text style={[styles.shopCostText, !canAfford && styles.shopCostInsufficient]}>
+                        {item.cost} 💎
+                      </Text>
+                    )}
                   </View>
                 </TouchableOpacity>
               )
