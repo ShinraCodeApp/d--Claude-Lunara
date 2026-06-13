@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Dimensions, ActivityIndicator,
+  ScrollView, Dimensions, ActivityIndicator, Alert,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -9,10 +9,11 @@ import Animated, { FadeInDown } from 'react-native-reanimated'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import * as Haptics from 'expo-haptics'
 import { router } from 'expo-router'
-
 import apiClient from '@/api/client'
-import { useAuthStore } from '@/store'
+import { useAuthStore, useSymptomStore } from '@/store'
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
+import { analyzePatterns, computeWellnessSummary, PhasePattern, WellnessSummary } from '@/utils/patternAnalysis'
+import { generateMonthlyReport } from '@/utils/pdfReport'
 
 const { width } = Dimensions.get('window')
 const BAR_MAX_HEIGHT = 80
@@ -45,9 +46,27 @@ const SYMPTOM_CATEGORIES = [
 export default function InsightsScreen() {
   const insets = useSafeAreaInsets()
   const { user } = useAuthStore()
-  const [activeTab, setActiveTab] = useState<'cycles' | 'symptoms' | 'reports'>('cycles')
+  const { logs } = useSymptomStore()
+  const [activeTab, setActiveTab] = useState<'cycles' | 'symptoms' | 'patterns' | 'reports'>('cycles')
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const patterns = analyzePatterns(logs)
+  const wellness = computeWellnessSummary(logs)
 
   const isPremium = user?.subscription?.tier !== 'FREE'
+
+  const symptomFrequencies = useMemo(() => {
+    if (!logs.length) return [0, 0, 0, 0, 0]
+    const counts = [0, 0, 0, 0, 0]
+    logs.forEach((log) => {
+      if (log.symptoms.some((s) => ['colicos', 'dolor_cabeza', 'dolor_espalda'].includes(s))) counts[0]++
+      if (['ansiosa', 'irritable', 'triste'].includes(log.mood ?? '')) counts[1]++
+      if (log.energy === 'baja') counts[2]++
+      if (log.symptoms.some((s) => ['nauseas', 'hinchazón'].includes(s))) counts[3]++
+      if (log.symptoms.includes('acne')) counts[4]++
+    })
+    const max = Math.max(...counts, 1)
+    return counts.map((c) => Math.round((c / max) * 100))
+  }, [logs])
 
   const { data: stats, isLoading: loadingStats } = useQuery<CycleStat>({
     queryKey: ['cycleStats'],
@@ -96,6 +115,7 @@ export default function InsightsScreen() {
   const tabs = [
     { id: 'cycles', label: '📈 Ciclos' },
     { id: 'symptoms', label: '🎯 Síntomas' },
+    { id: 'patterns', label: '🔮 Patrones' },
     { id: 'reports', label: '📄 Informes' },
   ] as const
 
@@ -228,14 +248,16 @@ export default function InsightsScreen() {
                   <Text style={styles.symptomCategoryIcon}>{cat.icon}</Text>
                   <Text style={styles.symptomCategoryName}>{cat.label}</Text>
                 </View>
-                {/* Placeholder bar - in production would use real symptom frequency data */}
                 <View style={styles.freqBarBg}>
                   <LinearGradient
                     colors={[cat.color + 'aa', cat.color + '44']}
-                    style={[styles.freqBar, { width: `${[72, 58, 45, 30, 20][i]}%` }]}
+                    style={[styles.freqBar, { width: `${symptomFrequencies[i]}%` }]}
                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                   />
                 </View>
+                <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', marginTop: 3 }}>
+                  {symptomFrequencies[i] > 0 ? `${symptomFrequencies[i]}% de días` : 'Sin registros'}
+                </Text>
               </View>
             ))}
 
@@ -253,72 +275,105 @@ export default function InsightsScreen() {
           </Animated.View>
         )}
 
+        {/* ─── PATTERNS TAB ────────────────────────────── */}
+        {activeTab === 'patterns' && (
+          <Animated.View entering={FadeInDown.delay(100)} style={{ gap: Spacing.md }}>
+            <Text style={[styles.sectionLabel, { marginBottom: 0 }]}>
+              Basado en {logs.length} registro{logs.length !== 1 ? 's' : ''} locales
+            </Text>
+
+            {/* Wellness stats row */}
+            <View style={styles.wellnessRow}>
+              {[
+                { icon: '😴', label: 'Sueño medio', value: wellness.avgSleepOverall ? `${wellness.avgSleepOverall}h` : '--' },
+                { icon: '💧', label: 'Agua media', value: wellness.avgWater ? `${wellness.avgWater} vasos` : '--' },
+                { icon: '💕', label: 'Días íntimos', value: wellness.totalIntimacyDays.toString() },
+                { icon: '❤️', label: 'Deseo medio', value: wellness.avgDesireOverall ? `${wellness.avgDesireOverall}/5` : '--' },
+              ].map((stat) => (
+                <View key={stat.label} style={styles.wellnessStat}>
+                  <Text style={styles.wellnessStatIcon}>{stat.icon}</Text>
+                  <Text style={styles.wellnessStatValue}>{stat.value}</Text>
+                  <Text style={styles.wellnessStatLabel}>{stat.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* BBT Chart */}
+            {wellness.bbtLogs.length >= 3 && (
+              <View style={styles.bbtCard}>
+                <Text style={styles.bbtTitle}>🌡️ Temperatura basal (BBT)</Text>
+                <Text style={styles.bbtSubtitle}>Últimos {wellness.bbtLogs.slice(-20).length} registros</Text>
+                <BBTChart bbtLogs={wellness.bbtLogs.slice(-20)} />
+                <Text style={styles.bbtHint}>El aumento sostenido de 0.2–0.5°C indica ovulación</Text>
+              </View>
+            )}
+
+            {patterns.map((p) => (
+              <PatternCard key={p.phase} pattern={p} />
+            ))}
+          </Animated.View>
+        )}
+
         {/* ─── REPORTS TAB ─────────────────────────────── */}
         {activeTab === 'reports' && (
-          <Animated.View entering={FadeInDown.delay(100)}>
-            {!isPremium ? (
-              <TouchableOpacity style={styles.premiumCta} onPress={() => router.push('/premium')}>
-                <LinearGradient colors={['#7c3aed', '#a855f7']} style={styles.premiumCtaGradient}>
-                  <Text style={styles.premiumCtaTitle}>👑 Informes PDF en Premium</Text>
-                  <Text style={styles.premiumCtaText}>
-                    Genera informes mensuales y anuales en PDF para compartir con tu ginecóloga
-                  </Text>
-                  <Text style={styles.premiumCtaBtn}>Desbloquear →</Text>
+          <Animated.View entering={FadeInDown.delay(100)} style={{ gap: Spacing.md }}>
+
+            {/* Local PDF — available for all users */}
+            <View style={styles.reportSection}>
+              <Text style={styles.sectionLabel}>📊 Informe mensual local</Text>
+              <Text style={styles.reportHint}>
+                Genera un PDF con tu ciclo, síntomas, BBT, sueño y más. Listo para compartir con tu ginecóloga.
+              </Text>
+              <TouchableOpacity
+                style={styles.generateBtn}
+                onPress={async () => {
+                  if (logs.length === 0) {
+                    Alert.alert('Sin registros', 'Registra al menos un día para generar el informe.')
+                    return
+                  }
+                  setPdfLoading(true)
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+                  const now = new Date()
+                  const monthName = now.toLocaleString('es-ES', { month: 'long' })
+                  const monthCapitalized = monthName.charAt(0).toUpperCase() + monthName.slice(1)
+                  try {
+                    await generateMonthlyReport({
+                      userName: user?.profile?.firstName ?? 'Usuaria',
+                      month: monthCapitalized,
+                      year: now.getFullYear(),
+                      logs,
+                    })
+                  } catch (e: any) {
+                    Alert.alert('Error', e?.message ?? 'No se pudo generar el PDF.')
+                  } finally {
+                    setPdfLoading(false)
+                  }
+                }}
+                disabled={pdfLoading}
+              >
+                <LinearGradient colors={[Colors.primary[600], Colors.lavender[500]]} style={styles.generateBtnGradient}>
+                  {pdfLoading
+                    ? <ActivityIndicator color="#fff" />
+                    : <>
+                        <Text style={styles.generateBtnIcon}>📄</Text>
+                        <Text style={styles.generateBtnText}>Generar y compartir PDF</Text>
+                      </>
+                  }
                 </LinearGradient>
               </TouchableOpacity>
-            ) : (
-              <>
-                <TouchableOpacity
-                  style={styles.generateBtn}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
-                    generateMonthlyMutation.mutate()
-                  }}
-                  disabled={generateMonthlyMutation.isPending}
-                >
-                  <LinearGradient colors={[Colors.primary[600], Colors.lavender[500]]} style={styles.generateBtnGradient}>
-                    {generateMonthlyMutation.isPending
-                      ? <ActivityIndicator color="#fff" />
-                      : <>
-                          <Text style={styles.generateBtnIcon}>📊</Text>
-                          <Text style={styles.generateBtnText}>Generar informe mensual</Text>
-                        </>
-                    }
-                  </LinearGradient>
-                </TouchableOpacity>
+            </View>
 
-                <Text style={styles.sectionLabel}>Informes anteriores</Text>
-
-                {(reports ?? []).length === 0 ? (
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyEmoji}>📄</Text>
-                    <Text style={styles.emptyTitle}>No hay informes todavía</Text>
-                    <Text style={styles.emptyText}>Genera tu primer informe mensual para verlo aquí</Text>
-                  </View>
-                ) : (
-                  (reports ?? []).map((report: any) => (
-                    <TouchableOpacity
-                      key={report.id}
-                      style={styles.reportCard}
-                      onPress={() => {
-                        // Open presigned PDF URL
-                        if (report.signedUrl) {
-                          // In production: Linking.openURL(report.signedUrl)
-                        }
-                      }}
-                    >
-                      <Text style={styles.reportIcon}>📄</Text>
-                      <View style={styles.reportInfo}>
-                        <Text style={styles.reportTitle}>{report.title}</Text>
-                        <Text style={styles.reportDate}>
-                          {new Date(report.createdAt).toLocaleDateString('es')}
-                        </Text>
-                      </View>
-                      <Text style={styles.reportDownload}>↓</Text>
-                    </TouchableOpacity>
-                  ))
-                )}
-              </>
+            {/* Premium cloud reports upsell */}
+            {!isPremium && (
+              <TouchableOpacity onPress={() => router.push('/premium')}>
+                <LinearGradient colors={['rgba(124,58,237,0.25)', 'rgba(168,85,247,0.15)']} style={styles.premiumCtaGradient}>
+                  <Text style={styles.premiumCtaTitle}>👑 Informes históricos en Premium</Text>
+                  <Text style={styles.premiumCtaText}>
+                    Accede a informes de meses anteriores, análisis anuales y sincronización en la nube
+                  </Text>
+                  <Text style={styles.premiumCtaBtn}>Ver Premium →</Text>
+                </LinearGradient>
+              </TouchableOpacity>
             )}
           </Animated.View>
         )}
@@ -395,6 +450,8 @@ const styles = StyleSheet.create({
   symptomCategoryName: { fontSize: Typography.fontSize.base, color: '#e9d5ff', fontFamily: Typography.fontFamily.medium },
   freqBarBg: { height: 8, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 4, overflow: 'hidden' },
   freqBar: { height: '100%', borderRadius: 4 },
+  reportSection: { gap: Spacing.sm },
+  reportHint: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.55)', lineHeight: 20 },
   premiumCta: { borderRadius: BorderRadius.xl, overflow: 'hidden' },
   premiumCtaGradient: { padding: Spacing.lg, gap: Spacing.sm },
   premiumCtaTitle: { fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.bold, color: '#fff' },
@@ -414,4 +471,145 @@ const styles = StyleSheet.create({
   reportTitle: { fontSize: Typography.fontSize.base, color: '#e9d5ff', fontFamily: Typography.fontFamily.medium },
   reportDate: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.4)' },
   reportDownload: { fontSize: Typography.fontSize.xl, color: Colors.lavender[300] },
+  patternCard: {
+    backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: BorderRadius.xl,
+    overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  patternHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.md },
+  patternEmoji: { fontSize: 28 },
+  patternPhaseLabel: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: '#fff' },
+  patternLogCount: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.4)', marginTop: 2 },
+  patternTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: Spacing.md, paddingBottom: Spacing.sm },
+  patternTag: {
+    paddingHorizontal: Spacing.sm, paddingVertical: 4,
+    borderRadius: BorderRadius.full, borderWidth: 1,
+  },
+  patternTagText: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.medium },
+  patternInsights: { padding: Spacing.md, paddingTop: 0, gap: 8 },
+  patternInsightRow: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'flex-start' },
+  patternInsightDot: { color: Colors.lavender[400], fontSize: 10, marginTop: 4 },
+  patternInsightText: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.7)', flex: 1, lineHeight: 20 },
+  wellnessRow: {
+    flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: BorderRadius.xl, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  wellnessStat: { flex: 1, alignItems: 'center', paddingVertical: Spacing.md, gap: 3 },
+  wellnessStatIcon: { fontSize: 18 },
+  wellnessStatValue: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold, color: '#e9d5ff' },
+  wellnessStatLabel: { fontSize: 9, color: 'rgba(255,255,255,0.4)', textAlign: 'center' },
+  bbtCard: {
+    backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: BorderRadius.xl, padding: Spacing.md,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', gap: 4,
+  },
+  bbtTitle: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: '#e9d5ff' },
+  bbtSubtitle: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.4)' },
+  bbtHint: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.3)', marginTop: 4, lineHeight: 16 },
 })
+
+function BBTChart({ bbtLogs }: { bbtLogs: Array<{ date: string; bbt: number }> }) {
+  const values = bbtLogs.map((l) => l.bbt)
+  const minV = Math.min(...values) - 0.1
+  const maxV = Math.max(...values) + 0.1
+  const range = maxV - minV || 0.5
+  const BAR_HEIGHT = 60
+
+  return (
+    <View style={bbtStyles.chart}>
+      {/* Y-axis labels */}
+      <View style={bbtStyles.yAxis}>
+        <Text style={bbtStyles.yLabel}>{maxV.toFixed(1)}</Text>
+        <Text style={bbtStyles.yLabel}>{minV.toFixed(1)}</Text>
+      </View>
+      {/* Bars */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+        <View style={[bbtStyles.barsRow, { height: BAR_HEIGHT + 24 }]}>
+          {bbtLogs.map((entry, i) => {
+            const normalised = (entry.bbt - minV) / range
+            const barH = Math.max(4, normalised * BAR_HEIGHT)
+            const isHigh = entry.bbt >= 37.0
+            return (
+              <View key={i} style={bbtStyles.barCol}>
+                <Text style={bbtStyles.barVal}>{entry.bbt.toFixed(1)}</Text>
+                <View style={[bbtStyles.barBg, { height: BAR_HEIGHT }]}>
+                  <LinearGradient
+                    colors={isHigh
+                      ? [Colors.rose[400], Colors.rose[500]]
+                      : [Colors.primary[400], Colors.lavender[500]]}
+                    style={[bbtStyles.bar, { height: barH }]}
+                  />
+                </View>
+                <Text style={bbtStyles.barDate}>
+                  {entry.date.slice(5).replace('-', '/')}
+                </Text>
+              </View>
+            )
+          })}
+        </View>
+      </ScrollView>
+    </View>
+  )
+}
+
+const bbtStyles = StyleSheet.create({
+  chart: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  yAxis: { justifyContent: 'space-between', paddingBottom: 20, paddingTop: 14 },
+  yLabel: { fontSize: 9, color: 'rgba(255,255,255,0.35)' },
+  barsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, paddingBottom: 0 },
+  barCol: { alignItems: 'center', gap: 2 },
+  barVal: { fontSize: 8, color: 'rgba(255,255,255,0.4)', marginBottom: 2 },
+  barBg: { width: 18, justifyContent: 'flex-end' },
+  bar: { width: '100%', borderRadius: 3 },
+  barDate: { fontSize: 7, color: 'rgba(255,255,255,0.3)', marginTop: 2, textAlign: 'center' },
+})
+
+const PHASE_COLORS: Record<string, string> = {
+  menstrual: Colors.rose[400],
+  follicular: Colors.primary[400],
+  ovulatory: Colors.success,
+  luteal: Colors.gold.main,
+}
+
+function PatternCard({ pattern }: { pattern: PhasePattern }) {
+  const color = PHASE_COLORS[pattern.phase]
+  const energyColors = { alta: Colors.success, media: Colors.gold.main, baja: Colors.dark.muted }
+  return (
+    <View style={styles.patternCard}>
+      <View style={[styles.patternHeader, { borderLeftWidth: 3, borderLeftColor: color }]}>
+        <Text style={styles.patternEmoji}>{pattern.emoji}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.patternPhaseLabel}>Fase {pattern.label}</Text>
+          <Text style={styles.patternLogCount}>{pattern.totalLogs} registro{pattern.totalLogs !== 1 ? 's' : ''}</Text>
+        </View>
+      </View>
+      {(pattern.topMood || pattern.topEnergy || pattern.topSymptoms.length > 0) && (
+        <View style={styles.patternTags}>
+          {pattern.topEnergy && (
+            <View style={[styles.patternTag, { borderColor: energyColors[pattern.topEnergy] + '60', backgroundColor: energyColors[pattern.topEnergy] + '20' }]}>
+              <Text style={[styles.patternTagText, { color: energyColors[pattern.topEnergy] }]}>
+                Energía {pattern.topEnergy}
+              </Text>
+            </View>
+          )}
+          {pattern.topMood && (
+            <View style={[styles.patternTag, { borderColor: Colors.lavender[400] + '60', backgroundColor: Colors.lavender[400] + '20' }]}>
+              <Text style={[styles.patternTagText, { color: Colors.lavender[300] }]}>{pattern.topMood}</Text>
+            </View>
+          )}
+          {pattern.topSymptoms.slice(0, 2).map((s) => (
+            <View key={s} style={[styles.patternTag, { borderColor: Colors.rose[400] + '60', backgroundColor: Colors.rose[400] + '20' }]}>
+              <Text style={[styles.patternTagText, { color: Colors.rose[300] }]}>{s.replace(/_/g, ' ')}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      <View style={styles.patternInsights}>
+        {pattern.insights.map((insight, i) => (
+          <View key={i} style={styles.patternInsightRow}>
+            <Text style={styles.patternInsightDot}>✦</Text>
+            <Text style={styles.patternInsightText}>{insight}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  )
+}
