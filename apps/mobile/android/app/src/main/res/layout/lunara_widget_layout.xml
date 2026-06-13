@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/widget_app_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🌙 Lunara"
+        android:textColor="#C4B5FD"
+        android:textSize="10sp"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentStart="true" />
+
+    <TextView
+        android:id="@+id/widget_phase_emoji"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🌙"
+        android:textSize="28sp"
+        android:layout_centerHorizontal="true"
+        android:layout_below="@id/widget_app_name"
+        android:layout_marginTop="4dp" />
+
+    <TextView
+        android:id="@+id/widget_phase_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Fase lútea"
+        android:textColor="#E9D5FF"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:layout_below="@id/widget_phase_emoji"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="4dp" />
+
+    <TextView
+        android:id="@+id/widget_day"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Día 1"
+        android:textColor="#A855F7"
+        android:textSize="10sp"
+        android:layout_below="@id/widget_phase_name"
+        android:layout_centerHorizontal="true" />
+
+    <TextView
+        android:id="@+id/widget_next_period"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Próximo período: 14 días"
+        android:textColor="#9CA3AF"
+        android:textSize="9sp"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true" />
+
+</RelativeLayout>

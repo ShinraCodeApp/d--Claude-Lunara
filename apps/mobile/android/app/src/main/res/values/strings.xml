@@ -1,0 +1,9 @@
+<resources>
+  <string name="app_name">Lunara</string>
+  <string name="expo_splash_screen_resize_mode" translatable="false">contain</string>
+  <string name="expo_splash_screen_status_bar_translucent" translatable="false">false</string>
+  <string name="widget_description">Lunara cycle tracker widget</string>
+  <string name="disguise_calc_name">Calculadora</string>
+  <string name="disguise_notes_name">Notas</string>
+  <string name="disguise_weather_name">Clima</string>
+</resources>
