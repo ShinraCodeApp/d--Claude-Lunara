@@ -103,14 +103,16 @@ export default function AiChatScreen() {
           role: m.role,
           content: m.content,
         })),
-        cycleContext: cycleStore.currentPhase ? {
-          day_of_cycle: cycleStore.dayOfCycle,
-          phase: cycleStore.currentPhase,
-          avg_cycle_length: 28,
-          next_period: cycleStore.nextPeriodDate,
-          next_ovulation: cycleStore.nextOvulationDate,
-          user_context: buildLunaContext(cycleStore.currentPhase, cycleStore.dayOfCycle, last14Logs),
-        } : null,
+        ...(cycleStore.currentPhase ? {
+          cycleContext: {
+            day_of_cycle: cycleStore.dayOfCycle,
+            phase: cycleStore.currentPhase,
+            avg_cycle_length: 28,
+            next_period: cycleStore.nextPeriodDate,
+            next_ovulation: cycleStore.nextOvulationDate,
+            user_context: buildLunaContext(cycleStore.currentPhase, cycleStore.dayOfCycle, last14Logs),
+          },
+        } : {}),
       })
 
       return { response: data.content, remaining: data.remainingToday, userMsg }

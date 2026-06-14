@@ -15,7 +15,7 @@ export async function aiRoutes(app: FastifyInstance) {
         role: z.enum(['user', 'assistant']),
         content: z.string().max(2000),
       })).max(20),
-      cycleContext: z.record(z.any()).optional(),
+      cycleContext: z.record(z.any()).optional().nullable(),
     }).parse(req.body)
 
     const isPremium = req.currentUser.subscription?.tier !== 'FREE'
