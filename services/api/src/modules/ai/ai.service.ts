@@ -40,15 +40,20 @@ export class AiService {
       }
     }
 
-    // Rate limiting per user per day
-    const today = new Date().toISOString().split('T')[0]
-    const rateKey = `${REDIS_KEYS.rateLimitAi(userId)}:${today}`
-    const count = await redis.incr(rateKey)
-    if (count === 1) await redis.expire(rateKey, 86400)
-
+    // Rate limiting per user per day (Redis optional — if unavailable, allow the request)
     const limit = isPremium ? RATE_LIMIT_PREMIUM : RATE_LIMIT_FREE
-    if (count > limit) {
-      throw { statusCode: 429, message: 'Límite de mensajes diarios alcanzado' }
+    let count = 1
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const rateKey = `${REDIS_KEYS.rateLimitAi(userId)}:${today}`
+      count = await redis.incr(rateKey)
+      if (count === 1) await redis.expire(rateKey, 86400)
+      if (count > limit) {
+        throw { statusCode: 429, message: 'Límite de mensajes diarios alcanzado' }
+      }
+    } catch (e: any) {
+      if (e?.statusCode === 429) throw e
+      // Redis unavailable — allow the request without rate limiting
     }
 
     let systemPrompt = LUNA_SYSTEM_PROMPT
