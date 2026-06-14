@@ -21,8 +21,8 @@ export async function aiRoutes(app: FastifyInstance) {
     const isPremium = req.currentUser.subscription?.tier !== 'FREE'
     const result = await aiService.chat(req.currentUser.id, body.messages, body.cycleContext, isPremium)
 
-    // Save to chat history
-    await aiService.saveChatMessage(req.currentUser.id, body.messages, result.content)
+    // Save to chat history (non-blocking — don't fail the response if DB write fails)
+    aiService.saveChatMessage(req.currentUser.id, body.messages, result.content).catch(() => {})
 
     return reply.send(result)
   })
