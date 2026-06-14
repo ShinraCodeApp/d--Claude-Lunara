@@ -194,6 +194,10 @@ model User {
   // Reports
   reports         GeneratedReport[]
 
+  // Community
+  communityPosts     CommunityPost[]
+  communityReactions CommunityReaction[]
+
   @@map("users")
   @@index([email])
   @@index([deletedAt])
@@ -813,4 +817,44 @@ model AuditLog {
   @@index([userId])
   @@index([action])
   @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// COMMUNITY
+// ─────────────────────────────────────────────────────────────
+
+model CommunityPost {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content     String   @db.Text
+  phase       String?
+  category    String   @default("general") // general, tip, question, support
+  isAnonymous Boolean  @default(true)
+  likesCount  Int      @default(0)
+  hugsCount   Int      @default(0)
+  isPinned    Boolean  @default(false)
+  reactions   CommunityReaction[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("community_posts")
+  @@index([userId])
+  @@index([createdAt])
+  @@index([category])
+}
+
+model CommunityReaction {
+  id        String        @id @default(uuid())
+  postId    String
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String        // like, hug, heart
+  createdAt DateTime      @default(now())
+
+  @@unique([postId, userId, type])
+  @@map("community_reactions")
+  @@index([postId])
+  @@index([userId])
 }

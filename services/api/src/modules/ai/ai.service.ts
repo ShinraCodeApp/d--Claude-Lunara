@@ -5,10 +5,9 @@ import { env } from '@/config/env'
 const RATE_LIMIT_FREE = 20
 const RATE_LIMIT_PREMIUM = 200
 
-// Use v1 REST API directly — the @google/generative-ai SDK uses v1beta which has deprecated model names
-const GEMINI_MODEL = 'gemini-2.0-flash'
+const GEMINI_MODEL = 'gemini-1.5-flash'
 const GEMINI_URL = (model: string) =>
-  `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`
+  `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`
 
 const LUNA_SYSTEM_PROMPT = `Eres Luna 🌙, la asistente de salud femenina de Lunara. Eres empática, cálida y científicamente precisa.
 
