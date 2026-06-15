@@ -44,7 +44,35 @@ if (fs.existsSync(expoPluginPath)) {
   }
 }
 
-// Patch 2: expo-print — add useDefaultAndroidSdkVersions() in the new config path
+// Patch 2: expo-modules-core PermissionsService.kt — nullable requestedPermissions (SDK 35 compat)
+const permissionsServicePath = path.join(__dirname, '../node_modules/expo-modules-core/android/src/main/java/expo/modules/adapters/react/permissions/PermissionsService.kt')
+if (fs.existsSync(permissionsServicePath)) {
+  let content = fs.readFileSync(permissionsServicePath, 'utf8')
+  if (content.includes('return requestedPermissions.contains(permission)') && !content.includes('requestedPermissions?.contains')) {
+    content = content.replace(
+      'return requestedPermissions.contains(permission)',
+      'return requestedPermissions?.contains(permission) ?: false'
+    )
+    fs.writeFileSync(permissionsServicePath, content, 'utf8')
+    console.log('[patch-gradle] Patched PermissionsService.kt — nullable requestedPermissions for SDK 35')
+  }
+}
+
+// Patch 3: expo-sensors BaseSensorService.kt — nullable requestedPermissions (SDK 35 compat)
+const baseSensorServicePath = path.join(__dirname, '../node_modules/expo-sensors/android/src/main/java/expo/modules/sensors/services/BaseSensorService.kt')
+if (fs.existsSync(baseSensorServicePath)) {
+  let content = fs.readFileSync(baseSensorServicePath, 'utf8')
+  if (content.includes('requestedPermissions.contains(Manifest.permission.HIGH_SAMPLING_RATE_SENSORS)') && !content.includes('requestedPermissions?.contains')) {
+    content = content.replace(
+      'requestedPermissions.contains(Manifest.permission.HIGH_SAMPLING_RATE_SENSORS)',
+      'requestedPermissions?.contains(Manifest.permission.HIGH_SAMPLING_RATE_SENSORS) ?: false'
+    )
+    fs.writeFileSync(baseSensorServicePath, content, 'utf8')
+    console.log('[patch-gradle] Patched BaseSensorService.kt — nullable requestedPermissions for SDK 35')
+  }
+}
+
+// Patch 4: expo-print — add useDefaultAndroidSdkVersions() in the new config path
 const expoPrintPath = path.join(__dirname, '../node_modules/expo-print/android/build.gradle')
 if (fs.existsSync(expoPrintPath)) {
   let content = fs.readFileSync(expoPrintPath, 'utf8')
