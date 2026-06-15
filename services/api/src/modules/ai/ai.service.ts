@@ -5,7 +5,7 @@ import { env } from '@/config/env'
 const RATE_LIMIT_FREE = 20
 const RATE_LIMIT_PREMIUM = 200
 
-const GEMINI_MODEL = 'gemini-1.5-flash'
+const GEMINI_MODEL = 'gemini-2.0-flash'
 const GEMINI_URL = (model: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`
 

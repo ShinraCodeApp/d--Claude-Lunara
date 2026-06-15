@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, Component } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, Dimensions, ActivityIndicator, Alert,
@@ -13,7 +13,6 @@ import apiClient from '@/api/client'
 import { useAuthStore, useSymptomStore } from '@/store'
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
 import { analyzePatterns, computeWellnessSummary, PhasePattern, WellnessSummary } from '@/utils/patternAnalysis'
-import { generateMonthlyReport } from '@/utils/pdfReport'
 
 const { width } = Dimensions.get('window')
 const BAR_MAX_HEIGHT = 80
@@ -43,7 +42,31 @@ const SYMPTOM_CATEGORIES = [
   { id: 'SKIN', label: 'Piel', icon: '✨', color: '#f9a8d4' },
 ]
 
-export default function InsightsScreen() {
+class InsightsErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props)
+    this.state = { error: null }
+  }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  render() {
+    if (this.state.error) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#0d0118', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+          <Text style={{ fontSize: 48, marginBottom: 16 }}>📊</Text>
+          <Text style={{ color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' }}>
+            Estadísticas no disponibles
+          </Text>
+          <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, textAlign: 'center', lineHeight: 22 }}>
+            Hubo un problema al cargar tus estadísticas. Registra algunos días de síntomas y vuelve a intentarlo.
+          </Text>
+        </View>
+      )
+    }
+    return this.props.children
+  }
+}
+
+function InsightsScreen() {
   const insets = useSafeAreaInsets()
   const { user } = useAuthStore()
   const { logs } = useSymptomStore()
@@ -58,11 +81,12 @@ export default function InsightsScreen() {
     if (!logs.length) return [0, 0, 0, 0, 0]
     const counts = [0, 0, 0, 0, 0]
     logs.forEach((log) => {
-      if (log.symptoms.some((s) => ['colicos', 'dolor_cabeza', 'dolor_espalda'].includes(s))) counts[0]++
+      const syms = log.symptoms ?? []
+      if (syms.some((s) => ['colicos', 'dolor_cabeza', 'dolor_espalda'].includes(s))) counts[0]++
       if (['ansiosa', 'irritable', 'triste'].includes(log.mood ?? '')) counts[1]++
       if (log.energy === 'baja') counts[2]++
-      if (log.symptoms.some((s) => ['nauseas', 'hinchazón'].includes(s))) counts[3]++
-      if (log.symptoms.includes('acne')) counts[4]++
+      if (syms.some((s) => ['nauseas', 'hinchazón'].includes(s))) counts[3]++
+      if (syms.includes('acne')) counts[4]++
     })
     const max = Math.max(...counts, 1)
     return counts.map((c) => Math.round((c / max) * 100))
@@ -164,7 +188,7 @@ export default function InsightsScreen() {
                   {[
                     { label: 'Duración media', value: `${stats.averageLength} días`, icon: '📅' },
                     { label: 'Período medio', value: `${stats.averagePeriodLength} días`, icon: '🩸' },
-                    { label: 'Ciclos registrados', value: stats.totalCycles.toString(), icon: '🔄' },
+                    { label: 'Ciclos registrados', value: String(stats.totalCycles ?? 0), icon: '🔄' },
                     { label: 'Regularidad', value: regularity.label, icon: '📊', highlight: regularity.color },
                   ].map((kpi) => (
                     <View key={kpi.label} style={styles.kpiCard}>
@@ -249,11 +273,13 @@ export default function InsightsScreen() {
                   <Text style={styles.symptomCategoryName}>{cat.label}</Text>
                 </View>
                 <View style={styles.freqBarBg}>
-                  <LinearGradient
-                    colors={[cat.color + 'aa', cat.color + '44']}
-                    style={[styles.freqBar, { width: `${symptomFrequencies[i]}%` }]}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  />
+                  {symptomFrequencies[i] > 0 && (
+                    <LinearGradient
+                      colors={[cat.color + 'aa', cat.color + '44']}
+                      style={[styles.freqBar, { width: `${symptomFrequencies[i]}%` }]}
+                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                    />
+                  )}
                 </View>
                 <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', marginTop: 3 }}>
                   {symptomFrequencies[i] > 0 ? `${symptomFrequencies[i]}% de días` : 'Sin registros'}
@@ -287,7 +313,7 @@ export default function InsightsScreen() {
               {[
                 { icon: '😴', label: 'Sueño medio', value: wellness.avgSleepOverall ? `${wellness.avgSleepOverall}h` : '--' },
                 { icon: '💧', label: 'Agua media', value: wellness.avgWater ? `${wellness.avgWater} vasos` : '--' },
-                { icon: '💕', label: 'Días íntimos', value: wellness.totalIntimacyDays.toString() },
+                { icon: '💕', label: 'Días íntimos', value: String(wellness.totalIntimacyDays ?? 0) },
                 { icon: '❤️', label: 'Deseo medio', value: wellness.avgDesireOverall ? `${wellness.avgDesireOverall}/5` : '--' },
               ].map((stat) => (
                 <View key={stat.label} style={styles.wellnessStat}>
@@ -337,6 +363,7 @@ export default function InsightsScreen() {
                   const monthName = now.toLocaleString('es-ES', { month: 'long' })
                   const monthCapitalized = monthName.charAt(0).toUpperCase() + monthName.slice(1)
                   try {
+                    const { generateMonthlyReport } = await import('@/utils/pdfReport')
                     await generateMonthlyReport({
                       userName: user?.profile?.firstName ?? 'Usuaria',
                       month: monthCapitalized,
@@ -380,6 +407,10 @@ export default function InsightsScreen() {
       </ScrollView>
     </LinearGradient>
   )
+}
+
+export default function InsightsScreenWithBoundary() {
+  return <InsightsErrorBoundary><InsightsScreen /></InsightsErrorBoundary>
 }
 
 const styles = StyleSheet.create({

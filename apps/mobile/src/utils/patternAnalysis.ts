@@ -80,7 +80,7 @@ export function analyzePatterns(logs: SymptomEntry[]): PhasePattern[] {
     const phaseLogs = logs.filter((l) => l.phase === phase)
     const moods = phaseLogs.map((l) => l.mood).filter(Boolean) as string[]
     const energies = phaseLogs.map((l) => l.energy).filter(Boolean) as string[]
-    const allSymptoms = phaseLogs.flatMap((l) => l.symptoms)
+    const allSymptoms = phaseLogs.flatMap((l) => l.symptoms ?? [])
 
     const topMood = mode(moods)
     const topEnergy = mode(energies) as 'alta' | 'media' | 'baja' | null
