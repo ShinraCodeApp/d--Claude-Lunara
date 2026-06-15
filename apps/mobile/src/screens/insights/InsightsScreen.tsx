@@ -1,12 +1,12 @@
-import React, { useState, useMemo, Component } from 'react'
+import React, { useState, useMemo, Component, useCallback } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Dimensions, ActivityIndicator, Alert,
+  ScrollView, Dimensions, ActivityIndicator, Alert, RefreshControl,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeInDown } from 'react-native-reanimated'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as Haptics from 'expo-haptics'
 import { router } from 'expo-router'
 import apiClient from '@/api/client'
@@ -68,10 +68,19 @@ class InsightsErrorBoundary extends Component<{ children: React.ReactNode }, { e
 
 function InsightsScreen() {
   const insets = useSafeAreaInsets()
+  const queryClient = useQueryClient()
   const { user } = useAuthStore()
   const { logs } = useSymptomStore()
   const [activeTab, setActiveTab] = useState<'cycles' | 'symptoms' | 'patterns' | 'reports'>('cycles')
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await queryClient.invalidateQueries({ queryKey: ['cycleStats'] })
+    await queryClient.invalidateQueries({ queryKey: ['cycleLengths'] })
+    await queryClient.invalidateQueries({ queryKey: ['reports'] })
+    setRefreshing(false)
+  }, [queryClient])
   const patterns = analyzePatterns(logs)
   const wellness = computeWellnessSummary(logs)
 
@@ -148,6 +157,7 @@ function InsightsScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 40 }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#a78bfa" colors={['#a78bfa']} />}
       >
         {/* ─── Header ─────────────────────────────────── */}
         <Animated.View entering={FadeInDown.delay(0)} style={styles.header}>

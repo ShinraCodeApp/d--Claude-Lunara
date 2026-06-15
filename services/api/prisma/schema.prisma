@@ -561,9 +561,10 @@ model Subscription {
   tier                SubscriptionTier   @default(FREE)
   status              SubscriptionStatus @default(ACTIVE)
 
-  // RevenueCat
+  // RevenueCat / Direct IAP
   revenuecatCustomerId String?
   productId           String?
+  purchaseToken       String?
 
   currentPeriodStart  DateTime?
   currentPeriodEnd    DateTime?

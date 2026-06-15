@@ -145,6 +145,43 @@ export class SubscriptionService {
     return { restored: false, message: 'No se encontraron suscripciones activas' }
   }
 
+  async activatePurchase(userId: string, data: { productId: string; purchaseToken: string; platform: 'android' | 'ios' }) {
+    const isAnnual = data.productId.includes('annual')
+    const tier = isAnnual ? SubscriptionTier.PREMIUM_ANNUAL : SubscriptionTier.PREMIUM_MONTHLY
+    const now = new Date()
+    const periodEnd = new Date(now.getTime() + (isAnnual ? 365 : 30) * 24 * 60 * 60 * 1000)
+
+    await prisma.subscription.upsert({
+      where: { userId },
+      update: {
+        tier,
+        status: SubscriptionStatus.ACTIVE,
+        productId: data.productId,
+        purchaseToken: data.purchaseToken,
+        platform: data.platform,
+        currentPeriodStart: now,
+        currentPeriodEnd: periodEnd,
+      },
+      create: {
+        userId,
+        tier,
+        status: SubscriptionStatus.ACTIVE,
+        productId: data.productId,
+        purchaseToken: data.purchaseToken,
+        platform: data.platform,
+        currentPeriodStart: now,
+        currentPeriodEnd: periodEnd,
+      },
+    })
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { role: 'PREMIUM' },
+    })
+
+    return { activated: true, tier, currentPeriodEnd: periodEnd }
+  }
+
   async cancelSubscription(userId: string, reason?: string) {
     await prisma.subscription.update({
       where: { userId },

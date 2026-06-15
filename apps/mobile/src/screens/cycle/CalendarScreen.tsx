@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Dimensions, ActivityIndicator,
+  ScrollView, Dimensions, ActivityIndicator, RefreshControl,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -52,7 +52,7 @@ export default function CalendarScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [currentMonth, setCurrentMonth] = useState(dayjs())
 
-  const { data, isLoading } = useCalendar(currentMonth.year(), currentMonth.month() + 1)
+  const { data, isLoading, isFetching, refetch } = useCalendar(currentMonth.year(), currentMonth.month() + 1)
   const { logs } = useSymptomStore()
 
   // Build a map of date → icons to show in the cell
@@ -128,7 +128,10 @@ export default function CalendarScreen() {
         </View>
       </LinearGradient>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor="#a78bfa" colors={['#a78bfa']} />}
+      >
         {/* ─── Legend ────────────────────────────────────── */}
         <Animated.View entering={FadeIn} style={styles.legend}>
           {Object.entries(DAY_COLORS).filter(([k]) => k !== 'normal').map(([key, val]) => (

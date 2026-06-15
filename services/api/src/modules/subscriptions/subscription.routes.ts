@@ -24,6 +24,18 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     return reply.status(200).send({ received: true })
   })
 
+  // POST /subscriptions/activate — activate after direct IAP purchase (react-native-iap)
+  app.post('/activate', async (req, reply) => {
+    const body = z.object({
+      productId: z.string(),
+      purchaseToken: z.string(),
+      platform: z.enum(['ios', 'android']),
+    }).parse(req.body)
+
+    const result = await subscriptionService.activatePurchase(req.currentUser.id, body)
+    return reply.send(result)
+  })
+
   // POST /subscriptions/restore — restore purchases
   app.post('/restore', async (req, reply) => {
     const body = z.object({

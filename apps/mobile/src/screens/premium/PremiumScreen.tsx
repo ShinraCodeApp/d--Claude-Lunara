@@ -1,29 +1,29 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Dimensions, ActivityIndicator,
+  ScrollView, Dimensions, ActivityIndicator, Alert,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated'
-import Purchases, { PurchasesPackage } from 'react-native-purchases'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  withIAPContext, useIAP,
+  requestSubscription, getAvailablePurchases, finishTransaction,
+} from 'react-native-iap'
+import { useQueryClient } from '@tanstack/react-query'
 import * as Haptics from 'expo-haptics'
 import { router } from 'expo-router'
 
 import { useAuthStore } from '@/store'
-import { Colors, Typography, Spacing, BorderRadius, Shadows } from '@/theme'
+import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
+import apiClient from '@/api/client'
 
 const { width } = Dimensions.get('window')
 
-const FEATURES_FREE = [
-  'Seguimiento básico del ciclo',
-  'Calendario menstrual',
-  'Predicción de período',
-  'Registro de síntomas y estado de ánimo',
-  'Notificaciones básicas',
-  'Jardín Lunar (fase inicial)',
-]
+const SKUS = {
+  monthly: 'com.shinracode.lunara.premium.monthly',
+  annual:  'com.shinracode.lunara.premium.annual',
+}
 
 const FEATURES_PREMIUM = [
   'Todo lo del plan gratuito',
@@ -40,65 +40,156 @@ const FEATURES_PREMIUM = [
 
 const PLAN_COLORS = {
   monthly: ['#7c3aed', '#a855f7'] as const,
-  annual: ['#d97706', '#f59e0b'] as const,
+  annual:  ['#d97706', '#f59e0b'] as const,
 }
 
-export default function PremiumScreen() {
+const COMPARISON_ROWS = [
+  { feature: 'Registro del ciclo',          free: '✓',      premium: '✓' },
+  { feature: 'Predicción de período',        free: '✓',      premium: '✓' },
+  { feature: 'Síntomas y estado de ánimo',  free: '✓',      premium: '✓' },
+  { feature: 'Calendario con emojis',        free: '✓',      premium: '✓' },
+  { feature: 'Jardín Lunar',                 free: 'Básico', premium: 'Completo + 2x XP' },
+  { feature: 'Chat con Luna IA',             free: '5/mes',  premium: 'Ilimitado 🤖' },
+  { feature: 'Informes PDF',                 free: '✗',      premium: '✓' },
+  { feature: 'Análisis de patrones',         free: 'Básico', premium: 'Avanzado 📊' },
+  { feature: 'Temperatura basal (BBT)',      free: '✗',      premium: '✓ 🌡️' },
+  { feature: 'Sincronización en la nube',    free: '✗',      premium: '✓ ☁️' },
+  { feature: 'Comparación de ciclos',        free: '2 ciclos', premium: 'Ilimitado' },
+  { feature: 'Publicidad',                   free: 'Sí',     premium: 'Sin anuncios 🚫' },
+  { feature: 'Modo pareja',                  free: '✗',      premium: '✓ 💑' },
+  { feature: 'Recomendaciones IA',           free: '✗',      premium: 'Personalizadas 🎯' },
+]
+
+function PremiumScreenInner() {
   const insets = useSafeAreaInsets()
   const { user } = useAuthStore()
   const queryClient = useQueryClient()
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('annual')
-  const [packages, setPackages] = useState<PurchasesPackage[]>([])
+  const [purchasing, setPurchasing] = useState(false)
+  const [restoring, setRestoring] = useState(false)
+
+  const { subscriptions, getSubscriptions, currentPurchase, currentPurchaseError } = useIAP()
 
   const isPremium = user?.subscription?.isPremium
 
-  const { isLoading: loadingPackages } = useQuery({
-    queryKey: ['revenueCat', 'packages'],
-    queryFn: async () => {
-      const offerings = await Purchases.getOfferings()
-      const pkgs = offerings.current?.availablePackages ?? []
-      setPackages(pkgs)
-      return pkgs
-    },
-  })
+  useEffect(() => {
+    getSubscriptions({ skus: Object.values(SKUS) })
+  }, [])
 
-  const purchaseMutation = useMutation({
-    mutationFn: async (pkg: PurchasesPackage) => {
-      const { customerInfo } = await Purchases.purchasePackage(pkg)
-      return customerInfo
-    },
-    onSuccess: () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-      queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
-      router.back()
-    },
-    onError: () => {
+  useEffect(() => {
+    if (!currentPurchase) return
+    const complete = async () => {
+      try {
+        await finishTransaction({ purchase: currentPurchase, isConsumable: false })
+
+        // Notify backend to activate Premium in DB
+        try {
+          const { data } = await apiClient.post('/subscriptions/activate', {
+            productId: currentPurchase.productId,
+            purchaseToken: currentPurchase.purchaseToken ?? currentPurchase.transactionReceipt,
+            platform: 'android',
+          })
+          const current = useAuthStore.getState().user
+          if (current) {
+            useAuthStore.getState().setUser({
+              ...current,
+              subscription: {
+                tier: data.tier,
+                status: 'active',
+                isPremium: true,
+                currentPeriodEnd: data.currentPeriodEnd,
+              },
+            })
+          }
+        } catch {
+          // Fallback: update local state only
+          const current = useAuthStore.getState().user
+          if (current) {
+            useAuthStore.getState().setUser({
+              ...current,
+              subscription: { tier: 'PREMIUM_MONTHLY', status: 'active', isPremium: true },
+            })
+          }
+        }
+
+        queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+        Alert.alert('🎉 ¡Bienvenida a Premium!', 'Tu suscripción está activa. Disfruta todas las funciones.', [
+          { text: 'Genial', onPress: () => router.back() },
+        ])
+      } finally {
+        setPurchasing(false)
+      }
+    }
+    complete()
+  }, [currentPurchase])
+
+  useEffect(() => {
+    if (currentPurchaseError) {
+      setPurchasing(false)
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-    },
-  })
+    }
+  }, [currentPurchaseError])
 
-  const restoreMutation = useMutation({
-    mutationFn: async () => {
-      const { customerInfo } = await Purchases.restorePurchases()
-      return customerInfo
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
-    },
-  })
+  const getSub = (plan: 'monthly' | 'annual') =>
+    subscriptions.find((s) => s.productId === SKUS[plan])
 
-  const getPackage = (planType: 'monthly' | 'annual') => {
-    return packages.find((p) =>
-      planType === 'annual' ? p.identifier.includes('annual') : p.identifier.includes('monthly')
-    )
+  const getPrice = (plan: 'monthly' | 'annual'): string => {
+    const sub = getSub(plan) as any
+    const price = sub?.subscriptionOfferDetails?.[0]?.pricingPhases?.pricingPhaseList?.[0]?.formattedPrice
+    return price ?? (plan === 'monthly' ? '$4.99' : '$34.99')
   }
 
-  const monthlyPkg = getPackage('monthly')
-  const annualPkg = getPackage('annual')
+  const getAnnualMonthly = (): string => {
+    const sub = getSub('annual') as any
+    const micros = sub?.subscriptionOfferDetails?.[0]?.pricingPhases?.pricingPhaseList?.[0]?.priceAmountMicros
+    if (!micros) return '$2.92/mes'
+    return `$${(Number(micros) / 1_000_000 / 12).toFixed(2)}/mes`
+  }
 
-  const monthlyPrice = monthlyPkg?.product.priceString ?? '$4.99'
-  const annualPrice = annualPkg?.product.priceString ?? '$34.99'
-  const annualMonthly = annualPkg ? `$${(annualPkg.product.price / 12).toFixed(2)}/mes` : '$2.92/mes'
+  const handlePurchase = async () => {
+    const sku = SKUS[selectedPlan]
+    const sub = getSub(selectedPlan) as any
+    try {
+      setPurchasing(true)
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+      const offerToken = sub?.subscriptionOfferDetails?.[0]?.offerToken
+      await requestSubscription({
+        sku,
+        ...(offerToken ? { subscriptionOffers: [{ sku, offerToken }] } : {}),
+      })
+    } catch (e: any) {
+      if (e?.code !== 'E_USER_CANCELLED') {
+        Alert.alert('Error', 'No se pudo completar la compra. Intenta de nuevo.')
+      }
+      setPurchasing(false)
+    }
+  }
+
+  const handleRestore = async () => {
+    try {
+      setRestoring(true)
+      const purchases = await getAvailablePurchases()
+      const hasActive = purchases.some((p) => Object.values(SKUS).includes(p.productId))
+      if (hasActive) {
+        const current = useAuthStore.getState().user
+        if (current) {
+          useAuthStore.getState().setUser({
+            ...current,
+            subscription: { tier: 'premium', status: 'active', isPremium: true },
+          })
+        }
+        queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
+        Alert.alert('✓ Compras restauradas', 'Tu suscripción Premium está activa.')
+      } else {
+        Alert.alert('Sin compras', 'No encontramos suscripciones activas en esta cuenta.')
+      }
+    } catch {
+      Alert.alert('Error', 'No se pudieron restaurar las compras.')
+    } finally {
+      setRestoring(false)
+    }
+  }
 
   if (isPremium) {
     return (
@@ -126,21 +217,18 @@ export default function PremiumScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 40 }]}
       >
-        {/* ─── Header ─────────────────────────────────── */}
+        {/* Header */}
         <Animated.View entering={FadeInDown.delay(0)} style={styles.header}>
           <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
             <Text style={styles.closeBtnText}>✕</Text>
           </TouchableOpacity>
           <Text style={styles.crownEmoji}>👑</Text>
           <Text style={styles.headerTitle}>Lunara Premium</Text>
-          <Text style={styles.headerSubtitle}>
-            Desbloquea todo el poder de tu ciclo con IA
-          </Text>
+          <Text style={styles.headerSubtitle}>Desbloquea todo el poder de tu ciclo con IA</Text>
         </Animated.View>
 
-        {/* ─── Plan selector ───────────────────────────── */}
+        {/* Plan selector */}
         <Animated.View entering={FadeInDown.delay(100)} style={styles.plansContainer}>
-          {/* Annual plan (recommended) */}
           <TouchableOpacity
             style={[styles.planCard, selectedPlan === 'annual' && styles.planCardSelected]}
             onPress={() => setSelectedPlan('annual')}
@@ -153,15 +241,14 @@ export default function PremiumScreen() {
                 <Text style={styles.planBadgeText}>MEJOR VALOR 🔥</Text>
               </View>
               <Text style={styles.planPeriod}>Anual</Text>
-              <Text style={styles.planPrice}>{annualPrice}</Text>
-              <Text style={styles.planMonthly}>{annualMonthly} · Ahorra 42%</Text>
+              <Text style={styles.planPrice}>{getPrice('annual')}</Text>
+              <Text style={styles.planMonthly}>{getAnnualMonthly()} · Ahorra 42%</Text>
               <View style={[styles.radioCircle, selectedPlan === 'annual' && styles.radioCircleSelected]}>
                 {selectedPlan === 'annual' && <View style={styles.radioFill} />}
               </View>
             </LinearGradient>
           </TouchableOpacity>
 
-          {/* Monthly plan */}
           <TouchableOpacity
             style={[styles.planCard, selectedPlan === 'monthly' && styles.planCardSelected]}
             onPress={() => setSelectedPlan('monthly')}
@@ -171,7 +258,7 @@ export default function PremiumScreen() {
               style={styles.planGradient}
             >
               <Text style={styles.planPeriod}>Mensual</Text>
-              <Text style={styles.planPrice}>{monthlyPrice}</Text>
+              <Text style={styles.planPrice}>{getPrice('monthly')}</Text>
               <Text style={styles.planMonthly}>por mes</Text>
               <View style={[styles.radioCircle, selectedPlan === 'monthly' && styles.radioCircleSelected]}>
                 {selectedPlan === 'monthly' && <View style={styles.radioFill} />}
@@ -180,64 +267,37 @@ export default function PremiumScreen() {
           </TouchableOpacity>
         </Animated.View>
 
-        {/* ─── CTA Button ──────────────────────────────── */}
+        {/* CTA */}
         <Animated.View entering={ZoomIn.delay(200)}>
           <TouchableOpacity
             style={styles.purchaseBtn}
-            onPress={() => {
-              const pkg = selectedPlan === 'annual' ? annualPkg : monthlyPkg
-              if (pkg) {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
-                purchaseMutation.mutate(pkg)
-              }
-            }}
-            disabled={purchaseMutation.isPending || loadingPackages}
+            onPress={handlePurchase}
+            disabled={purchasing}
           >
             <LinearGradient
               colors={selectedPlan === 'annual' ? PLAN_COLORS.annual : PLAN_COLORS.monthly}
               style={styles.purchaseBtnGradient}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
             >
-              {purchaseMutation.isPending
+              {purchasing
                 ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.purchaseBtnText}>
-                    Comenzar prueba gratuita de 7 días 🌙
-                  </Text>
+                : <Text style={styles.purchaseBtnText}>Comenzar prueba gratuita de 7 días 🌙</Text>
               }
             </LinearGradient>
           </TouchableOpacity>
-          <Text style={styles.trialNote}>
-            Prueba 7 días gratis · Cancela cuando quieras
-          </Text>
+          <Text style={styles.trialNote}>Prueba 7 días gratis · Cancela cuando quieras</Text>
         </Animated.View>
 
-        {/* ─── Comparison table ────────────────────────── */}
+        {/* Comparison table */}
         <Animated.View entering={FadeInDown.delay(300)} style={styles.featuresSection}>
           <Text style={styles.featuresTitle}>Gratis vs Premium</Text>
-
           <View style={styles.compTable}>
-            {/* Header */}
             <View style={[styles.compRow, styles.compHeader]}>
               <Text style={[styles.compCell, styles.compCellFeature, styles.compHeaderText]}>Función</Text>
               <Text style={[styles.compCell, styles.compCellPlan, styles.compHeaderText]}>Gratis</Text>
               <Text style={[styles.compCell, styles.compCellPlan, styles.compHeaderText, styles.compPremiumHeader]}>Premium 👑</Text>
             </View>
-            {[
-              { feature: 'Registro del ciclo', free: '✓', premium: '✓' },
-              { feature: 'Predicción de período', free: '✓', premium: '✓' },
-              { feature: 'Síntomas y estado de ánimo', free: '✓', premium: '✓' },
-              { feature: 'Calendario con emojis', free: '✓', premium: '✓' },
-              { feature: 'Jardín Lunar', free: 'Básico', premium: 'Completo + 2x XP' },
-              { feature: 'Chat con Luna IA', free: '5/mes', premium: 'Ilimitado 🤖' },
-              { feature: 'Informes PDF', free: '✗', premium: '✓' },
-              { feature: 'Análisis de patrones', free: 'Básico', premium: 'Avanzado 📊' },
-              { feature: 'Temperatura basal (BBT)', free: '✗', premium: '✓ 🌡️' },
-              { feature: 'Sincronización en la nube', free: '✗', premium: '✓ ☁️' },
-              { feature: 'Comparación de ciclos', free: '2 ciclos', premium: 'Ilimitado' },
-              { feature: 'Publicidad', free: 'Sí', premium: 'Sin anuncios 🚫' },
-              { feature: 'Modo pareja', free: '✗', premium: '✓ 💑' },
-              { feature: 'Recomendaciones IA', free: '✗', premium: 'Personalizadas 🎯' },
-            ].map((row, i) => (
+            {COMPARISON_ROWS.map((row, i) => (
               <View key={i} style={[styles.compRow, i % 2 === 0 && styles.compRowEven]}>
                 <Text style={[styles.compCell, styles.compCellFeature]}>{row.feature}</Text>
                 <Text style={[styles.compCell, styles.compCellPlan, styles.compFreeText]}>{row.free}</Text>
@@ -247,7 +307,7 @@ export default function PremiumScreen() {
           </View>
         </Animated.View>
 
-        {/* ─── Feature list ────────────────────────────── */}
+        {/* Feature list */}
         <Animated.View entering={FadeInDown.delay(400)} style={styles.featuresSection}>
           <Text style={styles.featuresTitle}>Todo incluido en Premium</Text>
           <View style={styles.featuresCard}>
@@ -260,7 +320,7 @@ export default function PremiumScreen() {
           </View>
         </Animated.View>
 
-        {/* ─── Testimonials ────────────────────────────── */}
+        {/* Testimonials */}
         <Animated.View entering={FadeInDown.delay(400)} style={styles.testimonialsSection}>
           <Text style={styles.featuresTitle}>Lo que dicen nuestras usuarias</Text>
           {[
@@ -276,13 +336,13 @@ export default function PremiumScreen() {
           ))}
         </Animated.View>
 
-        {/* ─── Restore & Legal ─────────────────────────── */}
+        {/* Restore & Legal */}
         <View style={styles.legalContainer}>
-          <TouchableOpacity onPress={() => restoreMutation.mutate()} disabled={restoreMutation.isPending}>
-            <Text style={styles.legalLink}>Restaurar compras</Text>
+          <TouchableOpacity onPress={handleRestore} disabled={restoring}>
+            <Text style={styles.legalLink}>{restoring ? 'Restaurando...' : 'Restaurar compras'}</Text>
           </TouchableOpacity>
           <Text style={styles.legalDot}>·</Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/privacy-policy' as any)}>
             <Text style={styles.legalLink}>Política de privacidad</Text>
           </TouchableOpacity>
           <Text style={styles.legalDot}>·</Text>
@@ -292,12 +352,14 @@ export default function PremiumScreen() {
         </View>
 
         <Text style={styles.legalText}>
-          El pago se cargará a tu cuenta de la tienda de aplicaciones. La suscripción se renueva automáticamente a menos que se cancele al menos 24 horas antes del final del período actual. Puedes gestionar y cancelar tu suscripción desde la configuración de tu cuenta en la tienda de aplicaciones.
+          El pago se cargará a tu cuenta de Google Play. La suscripción se renueva automáticamente a menos que se cancele al menos 24 horas antes del final del período actual. Puedes gestionar y cancelar tu suscripción desde la configuración de tu cuenta en Google Play.
         </Text>
       </ScrollView>
     </LinearGradient>
   )
 }
+
+export default withIAPContext(PremiumScreenInner)
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -329,16 +391,12 @@ const styles = StyleSheet.create({
     position: 'absolute', top: -1, left: -1, right: -1,
     backgroundColor: Colors.gold.main, paddingVertical: 4, alignItems: 'center',
   },
-  planBadgeText: {
-    fontSize: 9, fontFamily: Typography.fontFamily.bold, color: '#000', letterSpacing: 1,
-  },
+  planBadgeText: { fontSize: 9, fontFamily: Typography.fontFamily.bold, color: '#000', letterSpacing: 1 },
   planPeriod: {
     fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.7)',
     marginTop: 24, fontFamily: Typography.fontFamily.medium,
   },
-  planPrice: {
-    fontSize: Typography.fontSize['2xl'], fontFamily: Typography.fontFamily.bold, color: '#fff',
-  },
+  planPrice: { fontSize: Typography.fontSize['2xl'], fontFamily: Typography.fontFamily.bold, color: '#fff' },
   planMonthly: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.6)' },
   radioCircle: {
     width: 20, height: 20, borderRadius: 10, borderWidth: 2,
@@ -367,10 +425,7 @@ const styles = StyleSheet.create({
   featureRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
   featureCheck: { color: Colors.lavender[400], fontFamily: Typography.fontFamily.bold, width: 16 },
   featureText: { flex: 1, fontSize: Typography.fontSize.base, color: '#e9d5ff' },
-  compTable: {
-    borderRadius: BorderRadius.xl, overflow: 'hidden',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
-  },
+  compTable: { borderRadius: BorderRadius.xl, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   compRow: { flexDirection: 'row' },
   compRowEven: { backgroundColor: 'rgba(255,255,255,0.04)' },
   compHeader: { backgroundColor: 'rgba(139,92,246,0.3)' },
@@ -396,22 +451,11 @@ const styles = StyleSheet.create({
   },
   legalLink: { fontSize: Typography.fontSize.xs, color: Colors.lavender[300], textDecorationLine: 'underline' },
   legalDot: { color: 'rgba(255,255,255,0.3)', fontSize: Typography.fontSize.xs },
-  legalText: {
-    fontSize: 10, color: 'rgba(255,255,255,0.3)',
-    textAlign: 'center', lineHeight: 16,
-  },
-  premiumActiveContainer: {
-    flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.xl,
-  },
+  legalText: { fontSize: 10, color: 'rgba(255,255,255,0.3)', textAlign: 'center', lineHeight: 16 },
+  premiumActiveContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.xl },
   premiumActiveEmoji: { fontSize: 80, marginBottom: Spacing.lg },
-  premiumActiveTitle: {
-    fontSize: Typography.fontSize['3xl'], fontFamily: Typography.fontFamily.bold,
-    color: Colors.gold.main,
-  },
-  premiumActiveSubtitle: {
-    fontSize: Typography.fontSize.base, color: 'rgba(255,255,255,0.6)',
-    textAlign: 'center', marginTop: Spacing.sm,
-  },
+  premiumActiveTitle: { fontSize: Typography.fontSize['3xl'], fontFamily: Typography.fontFamily.bold, color: Colors.gold.main },
+  premiumActiveSubtitle: { fontSize: Typography.fontSize.base, color: 'rgba(255,255,255,0.6)', textAlign: 'center', marginTop: Spacing.sm },
   premiumExpiry: { fontSize: Typography.fontSize.sm, color: Colors.lavender[300], marginTop: Spacing.md },
   backBtn: {
     marginTop: Spacing.xl, backgroundColor: Colors.primary[600],

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Dimensions,
+  ScrollView, Dimensions, RefreshControl,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
@@ -108,7 +108,7 @@ export default function GardenScreen() {
     transform: [{ scale: crystalScale.value }],
   }))
 
-  const { data: gardenData, refetch } = useQuery({
+  const { data: gardenData, refetch, isFetching } = useQuery({
     queryKey: ['garden'],
     queryFn: () => apiClient.get('/garden').then((r) => r.data),
     onSuccess: (data) => {
@@ -155,7 +155,11 @@ export default function GardenScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor="#a78bfa" colors={['#a78bfa']} />}
+      >
         {/* ─── Main garden visual ─────────────────────── */}
         <LinearGradient
           colors={stageInfo.bgColors}
