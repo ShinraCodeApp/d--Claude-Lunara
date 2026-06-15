@@ -36,7 +36,14 @@ const PHASE_INFO = {
     gradient: ['#7c3aed', '#db2777'] as const,
     emoji: '🌑',
     energy: 'Baja',
-    tips: ['Descansa más', 'Aplica calor local', 'Evita alimentos inflamatorios'],
+    tips: [
+      '🛁 Aplica calor local en el abdomen — reduce cólicos hasta un 40%',
+      '🍫 Chocolate negro (70%+) aporta magnesio para aliviar calambres',
+      '🐟 Omega-3 del salmón reduce la inflamación menstrual',
+      '💊 Ibuprofeno funciona mejor tomado preventivo, antes del dolor',
+      '🧘 Yoga restaurativo y posturas de bebé alivian la tensión pélvica',
+      '💧 Beber más agua reduce hinchazón y retención de líquidos',
+    ],
   },
   follicular: {
     label: 'Fase Folicular',
@@ -44,7 +51,14 @@ const PHASE_INFO = {
     gradient: ['#8b5cf6', '#a855f7'] as const,
     emoji: '🌒',
     energy: 'Creciente',
-    tips: ['Comienza nuevos proyectos', 'Ejercicio moderado', 'Socializa'],
+    tips: [
+      '🚀 Empieza proyectos nuevos — tu cerebro está en modo creativo',
+      '💪 Ideal para entrenamientos de fuerza: tu tolerancia al dolor es mayor',
+      '🥦 Come crucíferas (brócoli, col) para equilibrar el estrógeno',
+      '🌰 Las semillas de lino apoya la producción hormonal natural',
+      '😴 Aprovecha que el sueño es más profundo en esta fase',
+      '🤝 Socializa — el estrógeno alto mejora la comunicación y la empatía',
+    ],
   },
   ovulatory: {
     label: 'Fase Ovulatoria',
@@ -52,7 +66,14 @@ const PHASE_INFO = {
     gradient: ['#059669', '#10b981'] as const,
     emoji: '🌕',
     energy: 'Alta',
-    tips: ['Reuniones importantes', 'Ejercicio intenso', 'Ventana fértil activa'],
+    tips: [
+      '🔥 HIIT y ejercicio intenso — tu cuerpo rinde al máximo ahora',
+      '🥚 Ventana fértil activa: mayor probabilidad de concepción',
+      '🗣️ Reuniones importantes y presentaciones — la comunicación fluye',
+      '🍒 Antioxidantes (frutas del bosque) protegen el óvulo',
+      '❤️ El deseo sexual aumenta naturalmente — instinto biológico',
+      '🥗 Ensaladas con hojas verdes aportan ácido fólico para la fertilidad',
+    ],
   },
   luteal: {
     label: 'Fase Lútea',
@@ -60,7 +81,14 @@ const PHASE_INFO = {
     gradient: ['#d97706', '#f59e0b'] as const,
     emoji: '🌗',
     energy: 'Media',
-    tips: ['Prioriza el autocuidado', 'Meditación', 'Dieta antiinflamatoria'],
+    tips: [
+      '🧘 Meditación 10 min/día reduce el cortisol y la ansiedad del SPM',
+      '🥑 El aguacate y el potasio reducen retención de líquidos',
+      '☕ Reduce la cafeína — empeora ansiedad e insomnio premenstrual',
+      '🛁 Baños calientes con sales de magnesio alivian tensión muscular',
+      '🍠 Carbohidratos complejos estabilizan el humor y el azúcar en sangre',
+      '😴 Acuéstate antes — la progesterona alta aumenta la somnolencia',
+    ],
   },
 }
 
@@ -95,6 +123,7 @@ export default function HomeScreen() {
 
   const phase = cycleStore.currentPhase || 'follicular'
   const phaseInfo = PHASE_INFO[phase]
+  const hasNoCycleData = !isLoading && !cycleStore.currentPhase
 
   const daysUntilPeriod = cycleStore.nextPeriodDate
     ? dayjs(cycleStore.nextPeriodDate).diff(dayjs(), 'day')
@@ -184,42 +213,80 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </Animated.View>
 
-        {/* Phase Card */}
-        <Animated.View entering={FadeInDown.delay(100)} style={styles.phaseCard}>
-          <View style={styles.phaseHeader}>
-            <Text style={styles.phaseEmoji}>{phaseInfo.emoji}</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.phaseLabel}>{phaseInfo.label}</Text>
-              <Text style={styles.phaseDescription}>{phaseInfo.description}</Text>
+        {/* Phase Card — or Setup Banner when no cycle data */}
+        {hasNoCycleData ? (
+          <Animated.View entering={FadeInDown.delay(100)} style={styles.setupCard}>
+            <Text style={styles.setupEmoji}>🌙</Text>
+            <Text style={styles.setupTitle}>¡Comienza tu seguimiento!</Text>
+            <Text style={styles.setupSubtitle}>
+              Registra tu primer período para que Luna pueda predecir tu ciclo y darte consejos personalizados.
+            </Text>
+            <TouchableOpacity
+              style={styles.setupBtn}
+              onPress={() => router.push('/(tabs)/log')}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.setupBtnText}>Registrar mi período ahora →</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        ) : (
+          <Animated.View entering={FadeInDown.delay(100)} style={styles.phaseCard}>
+            <View style={styles.phaseHeader}>
+              <Text style={styles.phaseEmoji}>{phaseInfo.emoji}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.phaseLabel}>{phaseInfo.label}</Text>
+                <Text style={styles.phaseDescription}>{phaseInfo.description}</Text>
+              </View>
             </View>
-          </View>
 
-          {/* Cycle day indicator */}
-          {cycleStore.dayOfCycle && (
-            <View style={styles.cycleDayBadge}>
-              <Text style={styles.cycleDayText}>Día {cycleStore.dayOfCycle} del ciclo</Text>
-            </View>
-          )}
-        </Animated.View>
+            {/* Cycle day indicator */}
+            {cycleStore.dayOfCycle && (
+              <View style={styles.cycleDayBadge}>
+                <Text style={styles.cycleDayText}>Día {cycleStore.dayOfCycle} del ciclo</Text>
+              </View>
+            )}
+          </Animated.View>
+        )}
 
         {/* Quick stats row */}
         <Animated.View entering={FadeInDown.delay(200)} style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>
-              {daysUntilPeriod !== null ? (daysUntilPeriod === 0 ? 'Hoy' : `${daysUntilPeriod}d`) : '--'}
-            </Text>
-            <Text style={styles.statLabel}>Próx. período</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{logStreak > 0 ? logStreak : currentStreak}🔥</Text>
-            <Text style={styles.statLabel}>Racha</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{crystalBalance}💎</Text>
-            <Text style={styles.statLabel}>Cristales</Text>
-          </View>
+          {hasNoCycleData ? (
+            <>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>🌱</Text>
+                <Text style={styles.statLabel}>Sin datos aún</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>0🔥</Text>
+                <Text style={styles.statLabel}>Racha</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{crystalBalance}💎</Text>
+                <Text style={styles.statLabel}>Cristales</Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>
+                  {daysUntilPeriod !== null ? (daysUntilPeriod === 0 ? 'Hoy' : `${daysUntilPeriod}d`) : '--'}
+                </Text>
+                <Text style={styles.statLabel}>Próx. período</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{logStreak > 0 ? logStreak : currentStreak}🔥</Text>
+                <Text style={styles.statLabel}>Racha</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{crystalBalance}💎</Text>
+                <Text style={styles.statLabel}>Cristales</Text>
+              </View>
+            </>
+          )}
         </Animated.View>
       </LinearGradient>
 
@@ -254,7 +321,7 @@ export default function HomeScreen() {
       </Animated.View>
 
       {/* ─── Period Start Card ─────────────────────────────── */}
-      {phase !== 'menstrual' && !cycleStore.isInPeriod && !periodStarted && (
+      {!hasNoCycleData && phase !== 'menstrual' && !cycleStore.isInPeriod && !periodStarted && (
         <Animated.View entering={FadeInDown.delay(255)} style={styles.section}>
           <LinearGradient
             colors={['rgba(190,24,93,0.2)', 'rgba(244,63,94,0.12)']}
@@ -417,6 +484,12 @@ export default function HomeScreen() {
             onPress={() => router.push('/(tabs)/insights')}
             color={Colors.rose[500]}
           />
+          <QuickAction
+            emoji="🏃‍♀️"
+            label="Health Connect"
+            onPress={() => router.push('/health/health-connect')}
+            color="#10b981"
+          />
         </View>
       </Animated.View>
 
@@ -475,12 +548,16 @@ export default function HomeScreen() {
 
       {/* ─── Phase Tips ────────────────────────────────────── */}
       <Animated.View entering={FadeInDown.delay(400)} style={styles.section}>
-        <Text style={styles.sectionTitle}>Consejos para hoy</Text>
+        <View style={styles.tipsSectionHeader}>
+          <Text style={styles.sectionTitle}>Consejos para hoy</Text>
+          <TouchableOpacity onPress={() => router.push('/health/phase-tips')} activeOpacity={0.7}>
+            <Text style={styles.tipsMoreBtn}>Ver recetas y ejercicio →</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.tipsCard}>
           <Text style={styles.energyBadge}>Energía {phaseInfo.energy}</Text>
           {phaseInfo.tips.map((tip, i) => (
             <View key={i} style={styles.tipRow}>
-              <Text style={styles.tipDot}>✦</Text>
               <Text style={styles.tipText}>{tip}</Text>
             </View>
           ))}
@@ -490,15 +567,15 @@ export default function HomeScreen() {
       {/* ─── Lunar Garden Preview ──────────────────────────── */}
       <Animated.View entering={FadeInDown.delay(500)} style={styles.section}>
         <TouchableOpacity
-          style={styles.gardenCard}
-          onPress={() => router.push('/garden')}
+          style={styles.gardenPreviewCard}
+          onPress={() => router.push('/(tabs)/garden')}
           activeOpacity={0.85}
         >
           <LinearGradient
             colors={['#4c1d95', '#7c3aed']}
             style={styles.gardenGradient}
           >
-            <Text style={styles.gardenTitle}>Jardín Lunar</Text>
+            <Text style={styles.gardenPreviewTitle}>Jardín Lunar</Text>
             <Text style={styles.gardenStage}>{GARDEN_LABELS[stage]}</Text>
             <View style={styles.xpBar}>
               <View style={[styles.xpFill, { width: `${Math.min((xp % 100) / 100 * 100, 100)}%` }]} />
@@ -507,6 +584,25 @@ export default function HomeScreen() {
           </LinearGradient>
         </TouchableOpacity>
       </Animated.View>
+
+      {/* ─── Getting Started Guide (no cycle data) ────────── */}
+      {hasNoCycleData && (
+        <Animated.View entering={FadeInDown.delay(400)} style={styles.section}>
+          <Text style={styles.sectionTitle}>¿Cómo empezar?</Text>
+          <View style={styles.tipsCard}>
+            {[
+              ['1️⃣', 'Registra cuándo empezó tu último período'],
+              ['2️⃣', 'Anota síntomas diarios para que Luna aprenda tu ciclo'],
+              ['3️⃣', 'Luna predecirá tu próximo período en pocos días'],
+              ['4️⃣', 'Gana XP y cristales con cada registro'],
+            ].map(([num, text]) => (
+              <View key={text} style={styles.tipRow}>
+                <Text style={styles.tipText}>{num}  {text}</Text>
+              </View>
+            ))}
+          </View>
+        </Animated.View>
+      )}
 
       {/* ─── Fertility Forecast ────────────────────────────── */}
       {cycleStore.fertileWindowStart && !ttcMode && (
@@ -660,7 +756,6 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSize.md,
     fontFamily: Typography.fontFamily.bold,
     color: Colors.dark.text,
-    marginBottom: Spacing.md,
   },
   actionsGrid: {
     flexDirection: 'row',
@@ -668,7 +763,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   actionCard: {
-    width: (width - Spacing.md * 2 - Spacing.sm * 3) / 4,
+    width: (width - Spacing.md * 2 - Spacing.sm * 2) / 3,
     aspectRatio: 0.9,
     backgroundColor: Colors.dark.card,
     borderRadius: BorderRadius.lg,
@@ -691,6 +786,14 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     ...Shadows.md,
   },
+  tipsSectionHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: Spacing.md,
+  },
+  tipsMoreBtn: {
+    fontSize: Typography.fontSize.xs, color: Colors.lavender[400],
+    fontFamily: Typography.fontFamily.medium,
+  },
   energyBadge: {
     alignSelf: 'flex-start',
     backgroundColor: Colors.primary[600] + '40',
@@ -703,30 +806,16 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   tipRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
     marginTop: 8,
   },
-  tipDot: { color: Colors.lavender[400], fontSize: 10 },
   tipText: {
-    fontSize: Typography.fontSize.base,
+    fontSize: Typography.fontSize.sm,
     color: Colors.dark.text,
     fontFamily: Typography.fontFamily.regular,
-    flex: 1,
-  },
-  gardenCard: {
-    borderRadius: BorderRadius.xl,
-    overflow: 'hidden',
-    ...Shadows.lg,
+    lineHeight: 20,
   },
   gardenGradient: {
     padding: Spacing.xl,
-  },
-  gardenTitle: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: Typography.fontSize.sm,
-    fontFamily: Typography.fontFamily.medium,
   },
   gardenStage: {
     color: '#fff',
@@ -776,6 +865,44 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSize.xs,
     color: Colors.lavender[400],
     marginTop: 4,
+  },
+  // Setup card (no cycle data state)
+  setupCard: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    gap: 8,
+  },
+  setupEmoji: { fontSize: 40 },
+  setupTitle: {
+    fontSize: Typography.fontSize.xl,
+    fontFamily: Typography.fontFamily.bold,
+    color: '#fff',
+    textAlign: 'center',
+  },
+  setupSubtitle: {
+    fontSize: Typography.fontSize.sm,
+    color: 'rgba(255,255,255,0.75)',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  setupBtn: {
+    marginTop: 8,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  setupBtnText: {
+    color: '#fff',
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.bold,
   },
   // Quick log
   quickLogBtn: {
@@ -869,7 +996,7 @@ const styles = StyleSheet.create({
   streakTitle: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: '#fde68a' },
   streakSub: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
   streakXp: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold, color: '#fbbf24' },
-  // Garden card
+  // Garden card (XP progress row)
   gardenCard: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
     borderRadius: BorderRadius.xl, padding: Spacing.md,
@@ -879,6 +1006,17 @@ const styles = StyleSheet.create({
   gardenTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   gardenTitle: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: '#c4b5fd' },
   gardenXp: { fontSize: Typography.fontSize.xs, color: Colors.lavender[400] },
+  // Garden preview card (full banner at bottom)
+  gardenPreviewCard: {
+    borderRadius: BorderRadius.xl,
+    overflow: 'hidden',
+    ...Shadows.lg,
+  },
+  gardenPreviewTitle: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.medium,
+  },
   xpBarBg: {
     height: 6, backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: BorderRadius.full, overflow: 'hidden',
