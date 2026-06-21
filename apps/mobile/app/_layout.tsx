@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react'
+import { View, StyleSheet } from 'react-native'
 import { Stack, router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
@@ -8,7 +9,6 @@ import * as SplashScreen from 'expo-splash-screen'
 import { useFonts, Nunito_400Regular, Nunito_500Medium, Nunito_700Bold, Nunito_800ExtraBold } from '@expo-google-fonts/nunito'
 import { PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display'
 import * as Sentry from '@sentry/react-native'
-import Purchases from 'react-native-purchases'
 
 import * as Notifications from 'expo-notifications'
 import { useAuthStore, useSettingsStore, useCycleStore, useGardenStore, useSymptomStore } from '@/store'
@@ -182,48 +182,53 @@ function RootLayoutNav() {
     return () => sub.remove()
   }, [])
 
-  if (!hasSeenPrivacyConsent && !__DEV__) {
-    return <PrivacyConsentScreen />
-  }
-
-  if (pinEnabled && !unlocked) {
-    return <PinLockScreen onUnlock={() => setUnlocked(true)} />
-  }
-
   return (
-    <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="auth" />
-      <Stack.Screen name="onboarding" />
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="premium" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-      <Stack.Screen name="profile/edit" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="profile/notifications" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="ai-chat" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="profile/index" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="profile/avatar" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="how-it-works" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="share-apk" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="profile/partner" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="security/pin-setup" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
-      <Stack.Screen name="security/disguise" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="insights/correlations" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="health/pregnancy" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="health/contraceptive" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="insights/bbt-chart" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="cycle/yearly-history" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="profile/medical" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="profile/language" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="profile/my-data" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="privacy-consent" options={{ animation: 'fade', gestureEnabled: false }} />
-      <Stack.Screen name="privacy-policy" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="health/pcos" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="health/phase-tips" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="insights/cycle-comparison" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="first-period-info" options={{ animation: 'fade', gestureEnabled: false }} />
-      <Stack.Screen name="community" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="insights/pdf-report" options={{ animation: 'slide_from_right' }} />
-    </Stack>
+    <>
+      <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="auth" />
+        <Stack.Screen name="onboarding" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="premium" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="profile/edit" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="profile/notifications" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="ai-chat" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="profile/index" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="profile/avatar" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="how-it-works" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="share-apk" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="profile/partner" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="security/pin-setup" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+        <Stack.Screen name="security/disguise" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="insights/correlations" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="health/pregnancy" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="health/contraceptive" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="insights/bbt-chart" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="cycle/yearly-history" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="profile/medical" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="profile/language" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="profile/my-data" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="privacy-consent" options={{ animation: 'fade', gestureEnabled: false }} />
+        <Stack.Screen name="privacy-policy" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="health/pcos" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="health/phase-tips" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="insights/cycle-comparison" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="first-period-info" options={{ animation: 'fade', gestureEnabled: false }} />
+        <Stack.Screen name="community" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="insights/pdf-report" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="health/health-connect" options={{ animation: 'slide_from_right' }} />
+      </Stack>
+      {!hasSeenPrivacyConsent && !__DEV__ && (
+        <View style={StyleSheet.absoluteFill}>
+          <PrivacyConsentScreen />
+        </View>
+      )}
+      {pinEnabled && !unlocked && (
+        <View style={StyleSheet.absoluteFill}>
+          <PinLockScreen onUnlock={() => setUnlocked(true)} />
+        </View>
+      )}
+    </>
   )
 }
 
@@ -235,12 +240,6 @@ export default function RootLayout() {
     Nunito_800ExtraBold,
     PlayfairDisplay_700Bold,
   })
-
-  useEffect(() => {
-    if (process.env.EXPO_PUBLIC_REVENUECAT_KEY) {
-      Purchases.configure({ apiKey: process.env.EXPO_PUBLIC_REVENUECAT_KEY })
-    }
-  }, [])
 
   useEffect(() => {
     if (fontsLoaded) SplashScreen.hideAsync()

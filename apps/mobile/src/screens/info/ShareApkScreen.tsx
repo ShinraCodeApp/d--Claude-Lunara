@@ -1,139 +1,58 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Share, Clipboard, Alert, Linking, Image,
+  ScrollView, Share, Alert, Linking, Image, TextInput,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeInDown } from 'react-native-reanimated'
 import { router } from 'expo-router'
+import { Clipboard } from 'react-native'
+import QRCode from 'react-native-qrcode-svg'
+
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
 import Constants from 'expo-constants'
 
 const SHINRA_LOGO = require('../../../assets/images/ShinraCodeLogo1.png')
-import * as FileSystem from 'expo-file-system'
-import * as Sharing from 'expo-sharing'
 
-const APK_INFO = {
-  name: 'Lunara by ShinraCode',
-  version: '1.0.0',
-  buildNumber: '1',
-  packageName: 'com.shinracode.lunara',
-  path: 'apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk',
-  size: '~45 MB',
-  minAndroid: 'Android 7.0 (API 24)',
-}
+// ─── Configura aquí el link de descarga (Google Drive, Dropbox, etc.) ─────────
+// Cuando subas el APK a Google Drive, reemplaza este valor con el link público.
+// Ejemplo: https://drive.google.com/file/d/XXXX/view?usp=sharing
+const DOWNLOAD_LINK = 'https://drive.google.com/file/d/1-1rtqPLfG2mZWd4siXoEC_hafE9IU8zq/view?usp=sharing'
 
-const INSTALL_STEPS = [
-  { n: '1', text: 'Descarga o recibe el archivo APK en tu Android.' },
-  { n: '2', text: 'Ve a Ajustes → Seguridad → Orígenes desconocidos y actívalo.' },
-  { n: '3', text: 'Abre el archivo APK desde tu carpeta de Descargas.' },
-  { n: '4', text: 'Toca "Instalar" y espera a que termine.' },
-  { n: '5', text: 'Abre Lunara y comparte tus impresiones.' },
-]
-
-// Path where build-apk.ps1 copies the APK via adb push
-const DEVICE_APK_DOWNLOAD = 'file:///sdcard/Download/lunara-release.apk'
+const SHARE_MSG =
+  `🌙 *Lunara by ShinraCode* — App de salud femenina con IA\n\n` +
+  `✅ Predicción de período con IA\n` +
+  `✅ Jardín Lunar (gamificación)\n` +
+  `✅ Asistente Luna IA\n` +
+  `✅ Análisis de patrones\n\n` +
+  `📲 Descarga aquí: ${DOWNLOAD_LINK}\n\n` +
+  `¡Tu feedback es muy valioso! 🙏`
 
 export default function ShareApkScreen() {
   const insets = useSafeAreaInsets()
   const [copied, setCopied] = useState(false)
-  const [apkReady, setApkReady] = useState(false)
-  const [sharing, setSharing] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
+  const appVersion = Constants.expoConfig?.version ?? '1.0.0'
 
-  const appVersion = Constants.expoConfig?.version ?? APK_INFO.version
+  const copyLink = () => {
+    Clipboard.setString(DOWNLOAD_LINK)
+    setLinkCopied(true)
+    setTimeout(() => setLinkCopied(false), 2500)
+  }
 
-  const SHARE_MSG =
-    `🌙 *Lunara by ShinraCode* — App de salud femenina con IA\n\n` +
-    `✅ Predicción de período\n` +
-    `✅ Jardín Lunar (gamificación)\n` +
-    `✅ Asistente Luna IA\n` +
-    `✅ Análisis de patrones\n\n` +
-    `📲 *Para instalar el APK adjunto:*\n` +
-    `1. Ajustes → Seguridad → activa "Orígenes desconocidos"\n` +
-    `2. Abre el archivo APK\n` +
-    `3. Toca Instalar\n\n` +
-    `v${appVersion} · Android 7.0+\n¡Tu feedback es muy valioso! 🙏`
-
-  useEffect(() => {
-    FileSystem.getInfoAsync(DEVICE_APK_DOWNLOAD)
-      .then((info) => setApkReady(info.exists))
-      .catch(() => setApkReady(false))
-  }, [])
-
-  // Returns a shareable URI for the APK (copies to cache so FileProvider can serve it)
-  const getShareableApkUri = async (): Promise<string | null> => {
-    try {
-      const info = await FileSystem.getInfoAsync(DEVICE_APK_DOWNLOAD)
-      if (!info.exists) return null
-      const cacheUri = FileSystem.cacheDirectory + 'lunara-release.apk'
-      await FileSystem.copyAsync({ from: DEVICE_APK_DOWNLOAD, to: cacheUri })
-      return cacheUri
-    } catch {
-      return null
+  const shareViaWhatsApp = async () => {
+    const url = `whatsapp://send?text=${encodeURIComponent(SHARE_MSG)}`
+    const canOpen = await Linking.canOpenURL(url)
+    if (canOpen) {
+      await Linking.openURL(url)
+    } else {
+      Alert.alert('WhatsApp no disponible', 'No se encontró WhatsApp instalado.')
     }
   }
 
   const shareViaSystem = async () => {
-    if (sharing) return
-    setSharing(true)
-    try {
-      const uri = await getShareableApkUri()
-      if (uri) {
-        // Copy caption to clipboard so user can paste it as message in the target app
-        Clipboard.setString(SHARE_MSG)
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/vnd.android.package-archive',
-          dialogTitle: 'Compartir Lunara APK',
-        })
-      } else {
-        // APK not on device yet — share text only with instructions
-        await Share.share({ title: 'Prueba Lunara', message: SHARE_MSG })
-        Alert.alert(
-          'APK no encontrado en el teléfono',
-          'Conecta el dispositivo al PC y ejecuta build-apk.ps1 para copiar el APK automáticamente.',
-          [{ text: 'Entendido' }]
-        )
-      }
-    } catch {
-      // user cancelled
-    } finally {
-      setSharing(false)
-    }
-  }
-
-  const copyPath = () => {
-    Clipboard.setString(APK_INFO.path)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  const shareWhatsApp = async () => {
-    if (sharing) return
-    setSharing(true)
-    try {
-      const uri = await getShareableApkUri()
-      if (uri) {
-        // Copy caption then open share picker — user selects WhatsApp
-        Clipboard.setString(SHARE_MSG)
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/vnd.android.package-archive',
-          dialogTitle: 'Enviar por WhatsApp',
-        })
-      } else {
-        // Fallback: open WhatsApp with pre-filled text only
-        const available = await Linking.canOpenURL('whatsapp://send?text=test')
-        if (available) {
-          await Linking.openURL(`whatsapp://send?text=${encodeURIComponent(SHARE_MSG)}`)
-        } else {
-          Alert.alert('WhatsApp no disponible', 'No se encontró WhatsApp instalado.')
-        }
-      }
-    } catch {
-      Alert.alert('WhatsApp no disponible', 'No se encontró WhatsApp instalado.')
-    } finally {
-      setSharing(false)
-    }
+    await Share.share({ title: 'Prueba Lunara', message: SHARE_MSG })
   }
 
   return (
@@ -148,166 +67,142 @@ export default function ShareApkScreen() {
             <Text style={styles.backText}>← Atrás</Text>
           </TouchableOpacity>
           <Text style={styles.title}>Compartir app</Text>
-          <Text style={styles.subtitle}>Comparte Lunara con tus testers</Text>
+          <Text style={styles.subtitle}>Comparte Lunara con testers antes de Play Store</Text>
         </Animated.View>
 
-        {/* APK Info Card */}
-        <Animated.View entering={FadeInDown.delay(80)}>
+        {/* App info card */}
+        <Animated.View entering={FadeInDown.delay(60)}>
           <LinearGradient
             colors={['rgba(139,92,246,0.25)', 'rgba(168,85,247,0.1)']}
-            style={styles.apkCard}
+            style={styles.appCard}
           >
-            <View style={styles.apkIconRow}>
-              <Image source={SHINRA_LOGO} style={styles.apkIcon} resizeMode="contain" />
+            <View style={styles.appRow}>
+              <Image source={SHINRA_LOGO} style={styles.appIcon} resizeMode="contain" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.apkName}>{APK_INFO.name}</Text>
-                <Text style={styles.apkDev}>Programador Yamil.D.Rueda</Text>
-                <Text style={styles.apkVersion}>v{appVersion} · Build {APK_INFO.buildNumber}</Text>
+                <Text style={styles.appName}>Lunara by ShinraCode</Text>
+                <Text style={styles.appDev}>Yamil D. Rueda</Text>
+                <Text style={styles.appVersion}>v{appVersion} · Android 8.0+</Text>
               </View>
               <View style={styles.apkBadge}>
                 <Text style={styles.apkBadgeText}>APK</Text>
               </View>
             </View>
+          </LinearGradient>
+        </Animated.View>
 
-            <View style={styles.apkDetails}>
-              {[
-                ['📦', 'Tamaño', APK_INFO.size],
-                ['🤖', 'Android mínimo', APK_INFO.minAndroid],
-                ['🏷️', 'Paquete', APK_INFO.packageName],
-              ].map(([icon, label, value]) => (
-                <View key={label} style={styles.detailRow}>
-                  <Text style={styles.detailIcon}>{icon}</Text>
-                  <Text style={styles.detailLabel}>{label}</Text>
-                  <Text style={styles.detailValue} numberOfLines={1}>{value}</Text>
+        {/* ─── QR Code ─────────────────────────────────────────── */}
+        <Animated.View entering={FadeInDown.delay(120)}>
+          <Text style={styles.sectionLabel}>Escanear para descargar</Text>
+          <LinearGradient
+            colors={['rgba(139,92,246,0.15)', 'rgba(88,28,135,0.08)']}
+            style={styles.qrCard}
+          >
+            <Text style={styles.qrHint}>
+              El tester escanea este QR con la cámara del celular y descarga el APK directo
+            </Text>
+
+            <View style={styles.qrWrapper}>
+              <QRCode
+                value={DOWNLOAD_LINK}
+                size={200}
+                backgroundColor="white"
+                color="#1a0533"
+                logo={SHINRA_LOGO}
+                logoSize={40}
+                logoBackgroundColor="white"
+                logoBorderRadius={8}
+              />
+            </View>
+
+            {/* Link copiable */}
+            <View style={styles.linkRow}>
+              <Text style={styles.linkText} numberOfLines={1} ellipsizeMode="middle">
+                {DOWNLOAD_LINK}
+              </Text>
+              <TouchableOpacity
+                style={[styles.copyBtn, linkCopied && styles.copyBtnDone]}
+                onPress={copyLink}
+              >
+                <Text style={styles.copyBtnText}>{linkCopied ? '✓' : '📋'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.qrNote}>
+              💡 Sube el APK a Google Drive → Compartir → "Cualquiera con el enlace" → pega el link en el código
+            </Text>
+          </LinearGradient>
+        </Animated.View>
+
+        {/* ─── Botones de compartir ─────────────────────────────── */}
+        <Animated.View entering={FadeInDown.delay(200)}>
+          <Text style={styles.sectionLabel}>Enviar link</Text>
+          <View style={styles.shareRow}>
+            <TouchableOpacity style={[styles.shareBtn, styles.shareBtnWhatsApp]} onPress={shareViaWhatsApp}>
+              <Text style={styles.shareBtnIcon}>💬</Text>
+              <Text style={styles.shareBtnText}>WhatsApp</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.shareBtn, styles.shareBtnSystem]} onPress={shareViaSystem}>
+              <Text style={styles.shareBtnIcon}>📤</Text>
+              <Text style={styles.shareBtnText}>Compartir</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+
+        {/* ─── Instrucciones para el tester ────────────────────── */}
+        <Animated.View entering={FadeInDown.delay(260)}>
+          <Text style={styles.sectionLabel}>Instrucciones para el tester</Text>
+          <LinearGradient
+            colors={['rgba(139,92,246,0.12)', 'rgba(88,28,135,0.06)']}
+            style={styles.stepsCard}
+          >
+            {[
+              ['1', 'Escanea el QR o abre el link que te enviaron'],
+              ['2', 'Descarga el archivo APK desde Google Drive'],
+              ['3', 'Ve a Ajustes → Seguridad → activa "Fuentes desconocidas"'],
+              ['4', 'Abre el APK desde Descargas y toca Instalar'],
+              ['5', 'Abre Lunara y comparte tus impresiones 🙏'],
+            ].map(([n, text]) => (
+              <View key={n} style={styles.stepRow}>
+                <View style={styles.stepNum}>
+                  <Text style={styles.stepNumText}>{n}</Text>
                 </View>
-              ))}
+                <Text style={styles.stepText}>{text}</Text>
+              </View>
+            ))}
+          </LinearGradient>
+        </Animated.View>
+
+        {/* ─── Próximamente: Play Store ─────────────────────────── */}
+        <Animated.View entering={FadeInDown.delay(320)}>
+          <LinearGradient
+            colors={['rgba(5,150,105,0.18)', 'rgba(6,78,59,0.1)']}
+            style={styles.comingSoonCard}
+          >
+            <Text style={styles.comingSoonTitle}>🚀 Próximamente en Play Store</Text>
+            <Text style={styles.comingSoonText}>
+              Cuando la app esté en Google Play, los testers podrán instalar y actualizar directamente desde la tienda sin pasos extras.
+            </Text>
+            <View style={styles.comingSoonBadge}>
+              <Text style={styles.comingSoonBadgeText}>v{appVersion} · com.shinracode.lunara</Text>
             </View>
           </LinearGradient>
         </Animated.View>
 
-        {/* Share Buttons */}
-        <Animated.View entering={FadeInDown.delay(160)}>
-          <Text style={styles.sectionTitle}>
-            {apkReady ? '📎 APK listo para compartir' : 'Compartir app'}
-          </Text>
-          {apkReady && (
-            <Text style={styles.apkReadyHint}>
-              El APK está en tu dispositivo. Se enviará junto con las instrucciones de instalación.
-            </Text>
-          )}
-          <View style={styles.shareRow}>
-            <TouchableOpacity
-              style={[styles.shareBtn, styles.shareBtnPrimary, sharing && styles.shareBtnDisabled]}
-              onPress={shareViaSystem}
-              disabled={sharing}
-            >
-              <Text style={styles.shareBtnIcon}>{sharing ? '⏳' : '📤'}</Text>
-              <Text style={styles.shareBtnText}>{sharing ? 'Compartiendo…' : 'Compartir'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.shareBtn, styles.shareBtnWhatsApp, sharing && styles.shareBtnDisabled]}
-              onPress={shareWhatsApp}
-              disabled={sharing}
-            >
-              <Text style={styles.shareBtnIcon}>💬</Text>
-              <Text style={styles.shareBtnText}>WhatsApp</Text>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-
-        {/* APK Path */}
-        <Animated.View entering={FadeInDown.delay(220)}>
-          <Text style={styles.sectionTitle}>Ruta del APK (Debug)</Text>
-          <View style={styles.pathCard}>
-            <Text style={styles.pathText} numberOfLines={3}>{APK_INFO.path}</Text>
-            <TouchableOpacity style={[styles.copyBtn, copied && styles.copyBtnDone]} onPress={copyPath}>
-              <Text style={styles.copyBtnText}>{copied ? '✓ Copiado' : '📋 Copiar'}</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.pathHint}>
-            Genera el APK con: <Text style={styles.pathCode}>cd apps/mobile/android && ./gradlew assembleDebug</Text>
-          </Text>
-        </Animated.View>
-
-        {/* Build Release APK */}
-        <Animated.View entering={FadeInDown.delay(280)}>
-          <LinearGradient
-            colors={['rgba(5,150,105,0.2)', 'rgba(6,78,59,0.15)']}
-            style={styles.buildCard}
-          >
-            <Text style={styles.buildTitle}>🔨 Generar APK de distribución</Text>
-            <Text style={styles.buildSubtitle}>Ejecuta en tu terminal desde la raíz del proyecto:</Text>
-            {[
-              { label: 'APK Debug (rápido)', cmd: 'cd apps/mobile/android\n./gradlew assembleDebug' },
-              { label: 'APK Release (distribución)', cmd: 'cd apps/mobile/android\n./gradlew assembleRelease' },
-            ].map((item) => (
-              <View key={item.label} style={styles.codeBlock}>
-                <Text style={styles.codeLabel}>{item.label}</Text>
-                <Text style={styles.codeText}>{item.cmd}</Text>
-              </View>
-            ))}
-            <Text style={styles.buildNote}>
-              💡 El APK estará en: <Text style={styles.buildPath}>android/app/build/outputs/apk/</Text>
-            </Text>
-          </LinearGradient>
-        </Animated.View>
-
-        {/* Install Instructions */}
-        <Animated.View entering={FadeInDown.delay(340)}>
-          <Text style={styles.sectionTitle}>Instrucciones para el tester</Text>
-          <LinearGradient
-            colors={['rgba(139,92,246,0.15)', 'rgba(88,28,135,0.1)']}
-            style={styles.stepsCard}
-          >
-            {INSTALL_STEPS.map((step) => (
-              <View key={step.n} style={styles.stepRow}>
-                <View style={styles.stepNum}>
-                  <Text style={styles.stepNumText}>{step.n}</Text>
-                </View>
-                <Text style={styles.stepText}>{step.text}</Text>
-              </View>
-            ))}
-          </LinearGradient>
-        </Animated.View>
-
-        {/* Feedback CTA */}
-        <Animated.View entering={FadeInDown.delay(400)}>
-          <LinearGradient
-            colors={[Colors.primary[700], '#be185d']}
-            style={styles.feedbackCard}
-          >
-            <Text style={styles.feedbackTitle}>¿Ya probaste la app?</Text>
-            <Text style={styles.feedbackText}>
-              Tu feedback es clave para mejorar Lunara antes del lanzamiento en Google Play.
-            </Text>
-            <TouchableOpacity style={styles.feedbackBtn} onPress={shareViaSystem}>
-              <Text style={styles.feedbackBtnText}>Enviar feedback →</Text>
-            </TouchableOpacity>
-          </LinearGradient>
-        </Animated.View>
-
-        {/* ShinraCode Branding */}
-        <Animated.View entering={FadeInDown.delay(460)}>
+        {/* ─── ShinraCode branding ──────────────────────────────── */}
+        <Animated.View entering={FadeInDown.delay(380)}>
           <LinearGradient
             colors={['rgba(255,255,255,0.04)', 'rgba(139,92,246,0.08)']}
             style={styles.shinraCard}
           >
             <Image source={SHINRA_LOGO} style={styles.shinraLogo} resizeMode="contain" />
-            <Text style={styles.shinraBy}>Programador Yamil.D.Rueda</Text>
-            <Text style={styles.shinraTagline}>Lunara v1.0.0 · ShinraCode</Text>
+            <Text style={styles.shinraBy}>Yamil D. Rueda · ShinraCode</Text>
             <View style={styles.shinraLinks}>
-              <TouchableOpacity
-                style={styles.shinraLink}
-                onPress={() => Linking.openURL('https://www.instagram.com/ShinraCode')}
-              >
-                <Text style={styles.shinraLinkText}>📸 @ShinraCode</Text>
+              <TouchableOpacity onPress={() => Linking.openURL('https://www.instagram.com/ShinraCode')}>
+                <Text style={styles.shinraLink}>📸 @ShinraCode</Text>
               </TouchableOpacity>
-              <View style={styles.shinraDot} />
-              <TouchableOpacity
-                style={styles.shinraLink}
-                onPress={() => Linking.openURL('https://shinracode.com')}
-              >
-                <Text style={styles.shinraLinkText}>🌐 shinracode.com</Text>
+              <Text style={styles.shinraDot}>·</Text>
+              <TouchableOpacity onPress={() => Linking.openURL('https://shinracode.com')}>
+                <Text style={styles.shinraLink}>🌐 shinracode.com</Text>
               </TouchableOpacity>
             </View>
           </LinearGradient>
@@ -321,117 +216,123 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: Spacing.md, gap: Spacing.md },
   header: { gap: 4 },
-  backBtn: { marginBottom: Spacing.sm },
+  backBtn: { marginBottom: 4 },
   backText: { color: Colors.lavender[300], fontSize: Typography.fontSize.base },
   title: { fontSize: Typography.fontSize['3xl'], fontFamily: Typography.fontFamily.bold, color: '#fff' },
-  subtitle: { fontSize: Typography.fontSize.base, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
-  sectionTitle: {
-    fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold,
+  subtitle: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
+  sectionLabel: {
+    fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.bold,
     color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 1,
     marginBottom: 4,
   },
-  apkCard: {
+  appCard: {
     borderRadius: BorderRadius.xl, padding: Spacing.md,
-    borderWidth: 1, borderColor: 'rgba(168,85,247,0.3)', gap: Spacing.md,
+    borderWidth: 1, borderColor: 'rgba(168,85,247,0.3)',
   },
-  apkIconRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  apkIcon: { width: 56, height: 56, borderRadius: BorderRadius.lg },
-  apkName: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: '#fff' },
-  apkDev: { fontSize: Typography.fontSize.xs, color: Colors.lavender[300], marginTop: 1 },
-  apkVersion: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.4)', marginTop: 2 },
+  appRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  appIcon: { width: 52, height: 52, borderRadius: BorderRadius.lg },
+  appName: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: '#fff' },
+  appDev: { fontSize: Typography.fontSize.xs, color: Colors.lavender[300], marginTop: 1 },
+  appVersion: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.35)', marginTop: 2 },
   apkBadge: {
     backgroundColor: Colors.primary[600], borderRadius: BorderRadius.sm,
     paddingHorizontal: 10, paddingVertical: 4,
   },
   apkBadgeText: { fontSize: 11, fontFamily: Typography.fontFamily.bold, color: '#fff', letterSpacing: 0.5 },
-  apkDetails: { gap: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', paddingTop: Spacing.sm },
-  detailRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  detailIcon: { fontSize: 14, width: 20 },
-  detailLabel: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.5)', width: 110 },
-  detailValue: { fontSize: Typography.fontSize.sm, color: '#fff', flex: 1 },
-  apkReadyHint: {
-    fontSize: Typography.fontSize.sm, color: '#6ee7b7',
-    marginBottom: Spacing.sm, lineHeight: 18,
+  qrCard: {
+    borderRadius: BorderRadius.xl, padding: Spacing.lg,
+    borderWidth: 1, borderColor: 'rgba(139,92,246,0.25)',
+    alignItems: 'center', gap: Spacing.md,
   },
-  shareRow: { flexDirection: 'row', gap: Spacing.sm },
-  shareBtnDisabled: { opacity: 0.5 },
-  shareBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: Spacing.xs, borderRadius: BorderRadius.xl, padding: Spacing.md,
-    borderWidth: 1,
+  qrHint: {
+    fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.55)',
+    textAlign: 'center', lineHeight: 20,
   },
-  shareBtnPrimary: {
-    backgroundColor: Colors.primary[700],
-    borderColor: Colors.primary[500],
+  qrWrapper: {
+    padding: 16, backgroundColor: '#fff',
+    borderRadius: BorderRadius.xl,
+    shadowColor: '#8b5cf6',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 8,
   },
-  shareBtnWhatsApp: {
-    backgroundColor: 'rgba(37,211,102,0.2)',
-    borderColor: 'rgba(37,211,102,0.4)',
-  },
-  shareBtnIcon: { fontSize: 18 },
-  shareBtnText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold, color: '#fff' },
-  pathCard: {
-    backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: BorderRadius.lg,
-    padding: Spacing.md, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+  linkRow: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.sm, paddingVertical: 10,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    width: '100%',
   },
-  pathText: { flex: 1, fontSize: 11, color: '#a78bfa', fontFamily: 'monospace', lineHeight: 16 },
+  linkText: {
+    flex: 1, fontSize: 11, color: '#a78bfa',
+    fontFamily: 'monospace',
+  },
   copyBtn: {
     backgroundColor: 'rgba(139,92,246,0.3)', borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.sm, paddingVertical: 6,
     borderWidth: 1, borderColor: 'rgba(139,92,246,0.5)',
   },
-  copyBtnDone: { backgroundColor: 'rgba(5,150,105,0.3)', borderColor: 'rgba(5,150,105,0.5)' },
-  copyBtnText: { fontSize: 12, color: '#fff', fontFamily: Typography.fontFamily.bold },
-  pathHint: { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 6, lineHeight: 18 },
-  pathCode: { color: '#a78bfa', fontFamily: 'monospace' },
-  buildCard: {
-    borderRadius: BorderRadius.xl, padding: Spacing.md, gap: Spacing.sm,
-    borderWidth: 1, borderColor: 'rgba(5,150,105,0.3)',
+  copyBtnDone: { backgroundColor: 'rgba(5,150,105,0.35)', borderColor: 'rgba(5,150,105,0.5)' },
+  copyBtnText: { fontSize: 14, color: '#fff' },
+  qrNote: {
+    fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.35)',
+    textAlign: 'center', lineHeight: 18,
   },
-  buildTitle: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: '#fff' },
-  buildSubtitle: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.5)' },
-  codeBlock: {
-    backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: BorderRadius.md,
-    padding: Spacing.sm, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  shareRow: { flexDirection: 'row', gap: Spacing.sm },
+  shareBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, borderRadius: BorderRadius.xl, paddingVertical: Spacing.md,
+    borderWidth: 1,
   },
-  codeLabel: { fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4 },
-  codeText: { fontSize: 12, color: '#6ee7b7', fontFamily: 'monospace', lineHeight: 18 },
-  buildNote: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.5)', lineHeight: 18 },
-  buildPath: { color: '#a78bfa', fontFamily: 'monospace' },
+  shareBtnWhatsApp: {
+    backgroundColor: 'rgba(37,211,102,0.18)',
+    borderColor: 'rgba(37,211,102,0.35)',
+  },
+  shareBtnSystem: {
+    backgroundColor: Colors.primary[700],
+    borderColor: Colors.primary[500],
+  },
+  shareBtnIcon: { fontSize: 18 },
+  shareBtnText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold, color: '#fff' },
   stepsCard: {
     borderRadius: BorderRadius.xl, padding: Spacing.md,
-    borderWidth: 1, borderColor: 'rgba(168,85,247,0.2)', gap: 14,
+    borderWidth: 1, borderColor: 'rgba(139,92,246,0.2)', gap: 14,
   },
   stepRow: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'flex-start' },
   stepNum: {
-    width: 28, height: 28, borderRadius: 14,
+    width: 26, height: 26, borderRadius: 13,
     backgroundColor: Colors.primary[600], alignItems: 'center', justifyContent: 'center',
   },
-  stepNumText: { fontSize: 13, fontFamily: Typography.fontFamily.bold, color: '#fff' },
-  stepText: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.75)', flex: 1, lineHeight: 20, paddingTop: 4 },
-  feedbackCard: {
-    borderRadius: BorderRadius.xl, padding: Spacing.xl,
-    alignItems: 'center', gap: Spacing.sm,
+  stepNumText: { fontSize: 12, fontFamily: Typography.fontFamily.bold, color: '#fff' },
+  stepText: {
+    flex: 1, fontSize: Typography.fontSize.sm,
+    color: 'rgba(255,255,255,0.7)', lineHeight: 20, paddingTop: 3,
   },
-  feedbackTitle: { fontSize: Typography.fontSize.xl, fontFamily: Typography.fontFamily.bold, color: '#fff' },
-  feedbackText: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: 20 },
-  feedbackBtn: {
-    marginTop: Spacing.sm, backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: BorderRadius.xl, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.sm,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
+  comingSoonCard: {
+    borderRadius: BorderRadius.xl, padding: Spacing.lg,
+    borderWidth: 1, borderColor: 'rgba(5,150,105,0.3)', gap: Spacing.sm,
+    alignItems: 'center',
   },
-  feedbackBtnText: { color: '#fff', fontFamily: Typography.fontFamily.bold, fontSize: Typography.fontSize.base },
+  comingSoonTitle: { fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.bold, color: '#fff' },
+  comingSoonText: {
+    fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.6)',
+    textAlign: 'center', lineHeight: 20,
+  },
+  comingSoonBadge: {
+    marginTop: 4, backgroundColor: 'rgba(5,150,105,0.2)',
+    borderRadius: BorderRadius.full, paddingHorizontal: Spacing.md, paddingVertical: 4,
+    borderWidth: 1, borderColor: 'rgba(5,150,105,0.4)',
+  },
+  comingSoonBadgeText: { fontSize: Typography.fontSize.xs, color: '#6ee7b7', fontFamily: Typography.fontFamily.medium },
   shinraCard: {
     borderRadius: BorderRadius.xl, padding: Spacing.lg,
-    alignItems: 'center', gap: Spacing.xs,
+    alignItems: 'center', gap: 6,
     borderWidth: 1, borderColor: 'rgba(139,92,246,0.2)',
   },
-  shinraLogo: { width: 88, height: 88, marginBottom: 4 },
-  shinraBy: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.medium, color: '#e9d5ff' },
-  shinraTagline: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.3)' },
-  shinraLinks: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginTop: 4 },
-  shinraLink: {},
-  shinraLinkText: { fontSize: Typography.fontSize.sm, color: Colors.lavender[300], textDecorationLine: 'underline' },
-  shinraDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)' },
+  shinraLogo: { width: 72, height: 72, marginBottom: 4 },
+  shinraBy: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.medium, color: '#e9d5ff' },
+  shinraLinks: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: 4 },
+  shinraLink: { fontSize: Typography.fontSize.sm, color: Colors.lavender[300], textDecorationLine: 'underline' },
+  shinraDot: { color: 'rgba(255,255,255,0.2)', fontSize: 12 },
 })

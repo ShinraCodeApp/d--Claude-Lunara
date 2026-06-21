@@ -1,252 +1,496 @@
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Linking,
+  FlatList, TextInput, Modal, KeyboardAvoidingView,
+  Platform, ActivityIndicator, RefreshControl,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeInDown } from 'react-native-reanimated'
 import { router } from 'expo-router'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import dayjs from 'dayjs'
+import relativeTime from 'dayjs/plugin/relativeTime'
+import 'dayjs/locale/es'
 
 import { useCycleStore } from '@/store'
+import apiClient from '@/api/client'
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
 
-const PHASE_TIPS: Record<string, { title: string; tips: string[] }> = {
-  menstrual: {
-    title: '🩸 Fase Menstrual — Tu cuerpo pide descanso',
-    tips: [
-      'El magnesio reduce los cólicos — prueba chocolate oscuro 70%+.',
-      'El calor en el abdomen (bolsa de agua caliente) alivia hasta un 40% del dolor.',
-      'Es normal sentirte más introspectiva — no te fuerces a socializar.',
-      'Evita el café en exceso: intensifica los cólicos en algunas personas.',
-      'Movimiento suave: yoga, caminata o estiramientos ayudan más que el reposo absoluto.',
-    ],
-  },
-  follicular: {
-    title: '🌱 Fase Folicular — Tu energía aumenta',
-    tips: [
-      'Es el mejor momento del mes para iniciar proyectos nuevos.',
-      'Tu memoria verbal está en su punto más alto — ideal para estudiar.',
-      'El metabolismo es más eficiente — los carbohidratos se queman mejor.',
-      'Es buena época para hacer networking o citas importantes.',
-      'La piel suele mejorar — el estrógeno aumenta el colágeno.',
-    ],
-  },
-  ovulatory: {
-    title: '🌕 Fase Ovulatoria — Tu momento de mayor poder',
-    tips: [
-      'La fertilidad está en su pico — si buscas o evitas embarazo, ten presente estos días.',
-      'Tu voz y lenguaje corporal son más atractivos — úsalo a tu favor.',
-      'Alta tolerancia al dolor — buen momento para citas médicas o dentales.',
-      'La libido suele ser mayor — es completamente normal.',
-      'Aprovecha para conversaciones difíciles: tu empatía está en su máximo.',
-    ],
-  },
-  luteal: {
-    title: '🌘 Fase Lútea — Cuídate con intención',
-    tips: [
-      'Si tienes PMS, reducir la sal ayuda a disminuir la retención de líquidos.',
-      'El magnesio y la vitamina B6 reducen la irritabilidad premenstrual.',
-      'Es normal sentirse más cansada — no es holgazanería, es biología.',
-      'Prioriza el sueño: el insomnio es más común en esta fase.',
-      'Deseos de carbohidratos son normales — elige opciones nutritivas.',
-    ],
-  },
+dayjs.extend(relativeTime)
+dayjs.locale('es')
+
+type Category = 'all' | 'general' | 'tip' | 'question' | 'support'
+
+interface CommunityPost {
+  id: string
+  content: string
+  phase: string | null
+  category: string
+  isAnonymous: boolean
+  likesCount: number
+  hugsCount: number
+  isPinned: boolean
+  createdAt: string
+  authorName: string
+  authorAvatar: string | null
+  myReactions: string[]
 }
 
-const GENERAL_TIPS = [
-  { emoji: '💊', title: 'Ácido fólico', body: '400mcg/día es recomendado para todas las mujeres en edad fértil, no solo en embarazo.' },
-  { emoji: '🌡️', title: 'BBT y ovulación', body: 'La temperatura basal sube 0.2–0.5°C después de ovular — regístrala al despertar antes de moverte.' },
-  { emoji: '💧', title: 'Hidratación y ciclo', body: 'Beber 2L/día reduce el dolor menstrual y mejora el moco cervical en fase folicular.' },
-  { emoji: '🧘', title: 'Cortisol y ciclo', body: 'El estrés crónico puede retrasar o eliminar la ovulación — el cortisol compite con la progesterona.' },
-  { emoji: '🥦', title: 'Hierro en menstruación', body: 'Consumir vitamina C junto con alimentos ricos en hierro triplica la absorción.' },
+const CATEGORY_LABELS: Record<Category, string> = {
+  all: '✨ Todo',
+  general: '💬 General',
+  tip: '💡 Consejos',
+  question: '❓ Preguntas',
+  support: '🤗 Apoyo',
+}
+
+const PHASE_EMOJI: Record<string, string> = {
+  menstrual: '🩸',
+  follicular: '🌱',
+  ovulatory: '🌕',
+  luteal: '🌘',
+}
+
+const DEV_SEED_POSTS: CommunityPost[] = [
+  {
+    id: 'seed-1', content: '¿Alguien más siente muchísimo cansancio en la fase lútea? Yo no puedo ni salir de la cama los últimos 3 días antes de mi período 😔', phase: 'luteal', category: 'question', isAnonymous: true, likesCount: 24, hugsCount: 18, isPinned: false, createdAt: new Date(Date.now() - 3600000 * 2).toISOString(), authorName: 'Lunara Anónima', authorAvatar: null, myReactions: [],
+  },
+  {
+    id: 'seed-2', content: '✨ Tip que me cambió la vida: tomar magnesio glicinato (400mg) 2 semanas antes del período. Reducí mis cólicos un 80%. Lo comparto porque a mí me costó años descubrirlo.', phase: 'luteal', category: 'tip', isAnonymous: false, likesCount: 87, hugsCount: 43, isPinned: true, createdAt: new Date(Date.now() - 3600000 * 24).toISOString(), authorName: 'María L.', authorAvatar: null, myReactions: ['like'],
+  },
+  {
+    id: 'seed-3', content: 'Acabo de confirmar mi ovulación con el BBT y el moco cervical por primera vez después de 8 meses intentándolo. Si están intentando concebir y no lo han probado, ¡los dos métodos juntos funcionan increíble! 🎉', phase: 'ovulatory', category: 'general', isAnonymous: true, likesCount: 56, hugsCount: 31, isPinned: false, createdAt: new Date(Date.now() - 3600000 * 48).toISOString(), authorName: 'Lunara Anónima', authorAvatar: null, myReactions: [],
+  },
+  {
+    id: 'seed-4', content: 'Hoy me diagnosticaron SOP. Estoy asustada y no sé por dónde empezar. ¿Alguien ha pasado por esto? Cualquier experiencia me ayuda mucho 💜', phase: null, category: 'support', isAnonymous: true, likesCount: 12, hugsCount: 67, isPinned: false, createdAt: new Date(Date.now() - 3600000 * 6).toISOString(), authorName: 'Lunara Anónima', authorAvatar: null, myReactions: [],
+  },
+  {
+    id: 'seed-5', content: 'En la fase folicular me siento imparable 💪 hoy empecé el proyecto que llevaba meses postergando. La energía de esta semana es una locura comparada con la semana pasada.', phase: 'follicular', category: 'general', isAnonymous: false, likesCount: 34, hugsCount: 9, isPinned: false, createdAt: new Date(Date.now() - 3600000 * 72).toISOString(), authorName: 'Valentina R.', authorAvatar: null, myReactions: [],
+  },
 ]
+
+async function fetchPosts({ pageParam, category }: { pageParam: string | undefined; category: Category }) {
+  if (__DEV__) {
+    await new Promise((r) => setTimeout(r, 400))
+    const filtered = category === 'all' ? DEV_SEED_POSTS : DEV_SEED_POSTS.filter((p) => p.category === category)
+    return { posts: filtered, nextCursor: null }
+  }
+  const params: Record<string, string> = {}
+  if (category !== 'all') params.category = category
+  if (pageParam) params.cursor = pageParam
+  const { data } = await apiClient.get('/community/posts', { params })
+  return data as { posts: CommunityPost[]; nextCursor: string | null }
+}
 
 export default function CommunityScreen() {
   const insets = useSafeAreaInsets()
   const cycleStore = useCycleStore()
-  const [expandedTip, setExpandedTip] = useState<number | null>(null)
+  const queryClient = useQueryClient()
+  const [category, setCategory] = useState<Category>('all')
+  const [showCompose, setShowCompose] = useState(false)
+  const [composeText, setComposeText] = useState('')
+  const [composeCategory, setComposeCategory] = useState<'general' | 'tip' | 'question' | 'support'>('general')
+  const [isAnonymous, setIsAnonymous] = useState(true)
+  const [localReactions, setLocalReactions] = useState<Record<string, string[]>>({})
 
-  const phase = cycleStore.currentPhase ?? 'follicular'
-  const phaseTips = PHASE_TIPS[phase] ?? PHASE_TIPS.follicular
+  const {
+    data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, refetch, isRefetching,
+  } = useInfiniteQuery({
+    queryKey: ['community-posts', category],
+    queryFn: ({ pageParam }) => fetchPosts({ pageParam: pageParam as string | undefined, category }),
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    initialPageParam: undefined,
+  })
 
-  const openLink = (url: string) => Linking.openURL(url).catch(() => {})
+  const posts: CommunityPost[] = data?.pages.flatMap((p) => p.posts) ?? []
+
+  const createMutation = useMutation({
+    mutationFn: async (body: { content: string; category: string; isAnonymous: boolean; phase?: string }) => {
+      if (__DEV__) {
+        await new Promise((r) => setTimeout(r, 500))
+        return
+      }
+      await apiClient.post('/community/posts', body)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['community-posts'] })
+      setShowCompose(false)
+      setComposeText('')
+    },
+  })
+
+  const handleReact = useCallback(async (postId: string, type: 'like' | 'hug') => {
+    setLocalReactions((prev) => {
+      const current = prev[postId] ?? []
+      return {
+        ...prev,
+        [postId]: current.includes(type) ? current.filter((r) => r !== type) : [...current, type],
+      }
+    })
+    if (!__DEV__) {
+      try { await apiClient.post(`/community/posts/${postId}/react`, { type }) } catch { }
+    }
+  }, [])
+
+  const handleCreate = useCallback(() => {
+    if (!composeText.trim()) return
+    createMutation.mutate({
+      content: composeText.trim(),
+      category: composeCategory,
+      isAnonymous,
+      phase: cycleStore.currentPhase ?? undefined,
+    })
+  }, [composeText, composeCategory, isAnonymous, cycleStore.currentPhase, createMutation])
+
+  const renderPost = useCallback(({ item, index }: { item: CommunityPost; index: number }) => {
+    const reactions = localReactions[item.id] ?? item.myReactions
+    const liked = reactions.includes('like')
+    const hugged = reactions.includes('hug')
+
+    return (
+      <Animated.View entering={FadeInDown.delay(index * 40)}>
+        <View style={[styles.postCard, item.isPinned && styles.pinnedCard]}>
+          {item.isPinned && (
+            <Text style={styles.pinnedBadge}>📌 Destacado</Text>
+          )}
+          <View style={styles.postHeader}>
+            <View style={styles.avatarCircle}>
+              <Text style={styles.avatarText}>
+                {item.isAnonymous ? '🌙' : item.authorName[0]}
+              </Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.authorName}>{item.authorName}</Text>
+              <View style={styles.metaRow}>
+                {item.phase && (
+                  <Text style={styles.phaseTag}>
+                    {PHASE_EMOJI[item.phase] ?? ''} {item.phase}
+                  </Text>
+                )}
+                <Text style={styles.timeAgo}>{dayjs(item.createdAt).fromNow()}</Text>
+              </View>
+            </View>
+            <View style={[styles.categoryBadge, { backgroundColor: CATEGORY_COLORS[item.category as Category] ?? '#4c1d95' }]}>
+              <Text style={styles.categoryBadgeText}>
+                {CATEGORY_ICON[item.category as Category] ?? '💬'}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={styles.postContent}>{item.content}</Text>
+
+          <View style={styles.reactRow}>
+            <TouchableOpacity
+              style={[styles.reactBtn, liked && styles.reactBtnActive]}
+              onPress={() => handleReact(item.id, 'like')}
+            >
+              <Text style={styles.reactIcon}>❤️</Text>
+              <Text style={[styles.reactCount, liked && styles.reactCountActive]}>
+                {item.likesCount + (liked && !item.myReactions.includes('like') ? 1 : !liked && item.myReactions.includes('like') ? -1 : 0)}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.reactBtn, hugged && styles.reactBtnActive]}
+              onPress={() => handleReact(item.id, 'hug')}
+            >
+              <Text style={styles.reactIcon}>🤗</Text>
+              <Text style={[styles.reactCount, hugged && styles.reactCountActive]}>
+                {item.hugsCount + (hugged && !item.myReactions.includes('hug') ? 1 : !hugged && item.myReactions.includes('hug') ? -1 : 0)}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Animated.View>
+    )
+  }, [localReactions, handleReact])
 
   return (
     <LinearGradient colors={['#0d0118', '#1a0533']} style={styles.container}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 40 }]}
-      >
-        <Animated.View entering={FadeInDown.delay(0)} style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backText}>← Atrás</Text>
-          </TouchableOpacity>
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Text style={styles.backText}>←</Text>
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
           <Text style={styles.title}>🤝 Comunidad</Text>
-          <Text style={styles.subtitle}>Consejos, recursos y conexión</Text>
-        </Animated.View>
+          <Text style={styles.subtitle}>Anónimo · Sin juicios · Solo apoyo</Text>
+        </View>
+        <TouchableOpacity style={styles.composeBtn} onPress={() => setShowCompose(true)}>
+          <Text style={styles.composeBtnText}>+ Compartir</Text>
+        </TouchableOpacity>
+      </View>
 
-        {/* Phase-specific tips */}
-        <Animated.View entering={FadeInDown.delay(100)}>
-          <LinearGradient colors={['rgba(139,92,246,0.2)', 'rgba(168,85,247,0.1)']} style={styles.phaseCard}>
-            <Text style={styles.phaseTitle}>{phaseTips.title}</Text>
-            <Text style={styles.phaseSubtitle}>Consejos para tu fase actual</Text>
-            {phaseTips.tips.map((tip, i) => (
-              <View key={i} style={styles.tipRow}>
-                <Text style={styles.tipBullet}>•</Text>
-                <Text style={styles.tipText}>{tip}</Text>
-              </View>
-            ))}
-          </LinearGradient>
-        </Animated.View>
-
-        {/* General health tips */}
-        <Animated.View entering={FadeInDown.delay(200)}>
-          <Text style={styles.sectionTitle}>💡 Sabías que...</Text>
-          {GENERAL_TIPS.map((tip, i) => (
-            <TouchableOpacity
-              key={i}
-              onPress={() => setExpandedTip(expandedTip === i ? null : i)}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={expandedTip === i
-                  ? ['rgba(139,92,246,0.25)', 'rgba(168,85,247,0.15)']
-                  : ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.03)']}
-                style={styles.generalTipCard}
-              >
-                <View style={styles.generalTipHeader}>
-                  <Text style={styles.generalTipEmoji}>{tip.emoji}</Text>
-                  <Text style={styles.generalTipTitle}>{tip.title}</Text>
-                  <Text style={styles.expandIcon}>{expandedTip === i ? '−' : '+'}</Text>
-                </View>
-                {expandedTip === i && (
-                  <Text style={styles.generalTipBody}>{tip.body}</Text>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-          ))}
-        </Animated.View>
-
-        {/* Join community */}
-        <Animated.View entering={FadeInDown.delay(300)}>
-          <LinearGradient
-            colors={['rgba(236,72,153,0.15)', 'rgba(139,92,246,0.1)']}
-            style={styles.joinCard}
+      {/* Category filter */}
+      <FlatList
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        data={Object.entries(CATEGORY_LABELS) as [Category, string][]}
+        keyExtractor={([k]) => k}
+        contentContainerStyle={styles.filterList}
+        renderItem={({ item: [key, label] }) => (
+          <TouchableOpacity
+            style={[styles.filterChip, category === key && styles.filterChipActive]}
+            onPress={() => setCategory(key)}
           >
-            <Text style={styles.joinEmoji}>💬</Text>
-            <Text style={styles.joinTitle}>Únete a la comunidad Lunara</Text>
-            <Text style={styles.joinBody}>
-              Conecta con otras mujeres, comparte experiencias y aprende
-              de la comunidad en nuestro grupo de WhatsApp.
+            <Text style={[styles.filterText, category === key && styles.filterTextActive]}>
+              {label}
             </Text>
-            <TouchableOpacity
-              style={styles.whatsappBtn}
-              onPress={() => openLink('https://chat.whatsapp.com/lunara-community')}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.whatsappBtnText}>💚 Unirse al grupo de WhatsApp</Text>
-            </TouchableOpacity>
-            <Text style={styles.comingSoon}>
-              📱 Foro integrado en la app — próximamente
-            </Text>
-          </LinearGradient>
-        </Animated.View>
+          </TouchableOpacity>
+        )}
+      />
 
-        {/* Resources */}
-        <Animated.View entering={FadeInDown.delay(400)}>
-          <Text style={styles.sectionTitle}>📚 Recursos recomendados</Text>
-          {[
-            { title: 'Planificación familiar natural', org: 'OMS', icon: '🌍' },
-            { title: 'Síndrome premenstrual (SPM)', org: 'Mayo Clinic', icon: '🏥' },
-            { title: 'Endometriosis: síntomas y tratamiento', org: 'ACOG', icon: '📋' },
-            { title: 'Fertilidad y nutrición', org: 'Harvard Health', icon: '🥗' },
-          ].map((r, i) => (
-            <View key={i} style={styles.resourceRow}>
-              <Text style={styles.resourceIcon}>{r.icon}</Text>
-              <View style={styles.resourceInfo}>
-                <Text style={styles.resourceTitle}>{r.title}</Text>
-                <Text style={styles.resourceOrg}>{r.org}</Text>
-              </View>
+      {/* Posts feed */}
+      {isLoading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator color={Colors.lavender[400]} size="large" />
+          <Text style={styles.loadingText}>Cargando comunidad...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={posts}
+          keyExtractor={(item) => item.id}
+          renderItem={renderPost}
+          contentContainerStyle={[styles.feed, { paddingBottom: insets.bottom + 24 }]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={refetch}
+              tintColor={Colors.lavender[400]}
+            />
+          }
+          onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage() }}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={isFetchingNextPage ? (
+            <ActivityIndicator color={Colors.lavender[400]} style={{ padding: 16 }} />
+          ) : null}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyEmoji}>🌙</Text>
+              <Text style={styles.emptyTitle}>Sé la primera en compartir</Text>
+              <Text style={styles.emptyBody}>La comunidad está esperando tu historia, consejo o pregunta.</Text>
             </View>
-          ))}
-        </Animated.View>
+          }
+        />
+      )}
 
-        {/* Luna AI teaser */}
-        <Animated.View entering={FadeInDown.delay(500)}>
-          <LinearGradient
-            colors={['rgba(139,92,246,0.15)', 'rgba(168,85,247,0.08)']}
-            style={styles.lunaCard}
-          >
-            <Text style={styles.lunaEmoji}>🌙</Text>
-            <Text style={styles.lunaTitle}>Luna IA — Tu guía personal</Text>
-            <Text style={styles.lunaBody}>
-              Tienes preguntas sobre tu ciclo? Luna está disponible en la
-              pantalla de inicio para responderte con base en tus propios datos.
-            </Text>
-          </LinearGradient>
-        </Animated.View>
-      </ScrollView>
+      {/* Compose modal */}
+      <Modal visible={showCompose} animationType="slide" transparent>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.composeSheet}>
+            <View style={styles.composeHeader}>
+              <Text style={styles.composeTitle}>✍️ Compartir en comunidad</Text>
+              <TouchableOpacity onPress={() => { setShowCompose(false); setComposeText('') }}>
+                <Text style={styles.closeBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={styles.composeInput}
+              value={composeText}
+              onChangeText={setComposeText}
+              placeholder="Comparte tu experiencia, consejo o pregunta..."
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              multiline
+              maxLength={500}
+              autoFocus
+            />
+            <Text style={styles.charCount}>{composeText.length}/500</Text>
+
+            {/* Category selector */}
+            <View style={styles.composeCatRow}>
+              {(['general', 'tip', 'question', 'support'] as const).map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[styles.composeCatChip, composeCategory === cat && styles.composeCatChipActive]}
+                  onPress={() => setComposeCategory(cat)}
+                >
+                  <Text style={styles.composeCatText}>{CATEGORY_ICON[cat]} {cat}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Anonymous toggle */}
+            <TouchableOpacity
+              style={styles.anonRow}
+              onPress={() => setIsAnonymous(!isAnonymous)}
+            >
+              <View style={[styles.anonToggle, isAnonymous && styles.anonToggleOn]}>
+                <View style={[styles.anonThumb, isAnonymous && styles.anonThumbOn]} />
+              </View>
+              <Text style={styles.anonLabel}>
+                {isAnonymous ? '🌙 Anónima' : '👤 Con tu nombre'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.submitBtn, (!composeText.trim() || createMutation.isPending) && styles.submitBtnDisabled]}
+              onPress={handleCreate}
+              disabled={!composeText.trim() || createMutation.isPending}
+            >
+              {createMutation.isPending
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={styles.submitBtnText}>Publicar</Text>
+              }
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </LinearGradient>
   )
 }
 
+const CATEGORY_COLORS: Record<string, string> = {
+  general: '#4c1d95',
+  tip: '#064e3b',
+  question: '#1e3a5f',
+  support: '#831843',
+}
+
+const CATEGORY_ICON: Record<string, string> = {
+  general: '💬',
+  tip: '💡',
+  question: '❓',
+  support: '🤗',
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { paddingHorizontal: Spacing.md, gap: Spacing.md },
-  header: { gap: 4 },
-  backBtn: { marginBottom: Spacing.sm },
-  backText: { color: Colors.lavender[300], fontSize: Typography.fontSize.base },
-  title: { fontSize: Typography.fontSize['3xl'], fontFamily: Typography.fontFamily.bold, color: '#fff' },
-  subtitle: { fontSize: Typography.fontSize.base, color: 'rgba(255,255,255,0.5)' },
-  phaseCard: {
-    borderRadius: BorderRadius.xl, padding: Spacing.lg,
-    borderWidth: 1, borderColor: 'rgba(168,85,247,0.3)', gap: 8,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.sm,
+    gap: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.07)',
   },
-  phaseTitle: { fontSize: Typography.fontSize.md, fontFamily: Typography.fontFamily.bold, color: '#c4b5fd' },
-  phaseSubtitle: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.4)', marginBottom: 4 },
-  tipRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
-  tipBullet: { color: Colors.lavender[400], fontSize: Typography.fontSize.md, lineHeight: 22 },
-  tipText: { flex: 1, fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.8)', lineHeight: 20 },
-  sectionTitle: {
-    fontSize: Typography.fontSize.md, fontFamily: Typography.fontFamily.bold,
-    color: '#fff', marginTop: 4,
+  backBtn: { padding: 4 },
+  backText: { color: Colors.lavender[300], fontSize: 22 },
+  title: { fontSize: Typography.fontSize.xl, fontFamily: Typography.fontFamily.bold, color: '#fff' },
+  subtitle: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.4)', marginTop: 1 },
+  composeBtn: {
+    backgroundColor: Colors.primary[600],
+    borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
   },
-  generalTipCard: {
-    borderRadius: BorderRadius.lg, padding: Spacing.md,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)', marginTop: 8,
+  composeBtnText: { color: '#fff', fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold },
+  filterList: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, gap: 8 },
+  filterChip: {
+    paddingHorizontal: Spacing.md, paddingVertical: 6,
+    borderRadius: BorderRadius.full, backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
-  generalTipHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  generalTipEmoji: { fontSize: 20 },
-  generalTipTitle: { flex: 1, fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold, color: '#fff' },
-  expandIcon: { color: Colors.lavender[400], fontSize: 20, fontFamily: Typography.fontFamily.bold },
-  generalTipBody: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.7)', marginTop: 10, lineHeight: 20 },
-  joinCard: {
-    borderRadius: BorderRadius.xl, padding: Spacing.lg,
-    borderWidth: 1, borderColor: 'rgba(236,72,153,0.2)', alignItems: 'center', gap: 10,
+  filterChipActive: { backgroundColor: Colors.primary[700], borderColor: Colors.primary[500] },
+  filterText: { color: 'rgba(255,255,255,0.5)', fontSize: Typography.fontSize.sm },
+  filterTextActive: { color: '#fff', fontFamily: Typography.fontFamily.bold },
+  feed: { paddingHorizontal: Spacing.md, paddingTop: Spacing.sm, gap: Spacing.sm },
+  postCard: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    gap: Spacing.sm,
+    marginBottom: 2,
   },
-  joinEmoji: { fontSize: 36 },
-  joinTitle: { fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.bold, color: '#fff', textAlign: 'center' },
-  joinBody: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 20 },
-  whatsappBtn: {
-    backgroundColor: '#25D366', borderRadius: BorderRadius.lg,
-    paddingVertical: Spacing.sm + 2, paddingHorizontal: Spacing.lg, marginTop: 4,
+  pinnedCard: {
+    borderColor: 'rgba(168,85,247,0.4)',
+    backgroundColor: 'rgba(139,92,246,0.08)',
   },
-  whatsappBtnText: { color: '#fff', fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold },
-  comingSoon: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.3)', marginTop: 4 },
-  resourceRow: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
-    paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)',
+  pinnedBadge: { fontSize: Typography.fontSize.xs, color: Colors.lavender[400] },
+  postHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  avatarCircle: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(139,92,246,0.3)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  resourceIcon: { fontSize: 22, width: 32, textAlign: 'center' },
-  resourceInfo: { flex: 1 },
-  resourceTitle: { fontSize: Typography.fontSize.sm, color: '#fff', fontFamily: Typography.fontFamily.medium },
-  resourceOrg: { fontSize: Typography.fontSize.xs, color: Colors.lavender[400], marginTop: 1 },
-  lunaCard: {
-    borderRadius: BorderRadius.xl, padding: Spacing.lg,
-    borderWidth: 1, borderColor: 'rgba(139,92,246,0.2)', alignItems: 'center', gap: 8,
+  avatarText: { fontSize: 16 },
+  authorName: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold, color: '#fff' },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 },
+  phaseTag: { fontSize: 11, color: Colors.lavender[400], textTransform: 'capitalize' },
+  timeAgo: { fontSize: 11, color: 'rgba(255,255,255,0.3)' },
+  categoryBadge: {
+    width: 28, height: 28, borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center',
   },
-  lunaEmoji: { fontSize: 32 },
-  lunaTitle: { fontSize: Typography.fontSize.md, fontFamily: Typography.fontFamily.bold, color: '#c4b5fd' },
-  lunaBody: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 20 },
+  categoryBadgeText: { fontSize: 14 },
+  postContent: {
+    fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.85)',
+    lineHeight: 21, fontFamily: Typography.fontFamily.regular,
+  },
+  reactRow: { flexDirection: 'row', gap: Spacing.sm, marginTop: 4 },
+  reactBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  reactBtnActive: { backgroundColor: 'rgba(139,92,246,0.2)', borderColor: 'rgba(139,92,246,0.4)' },
+  reactIcon: { fontSize: 14 },
+  reactCount: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.5)' },
+  reactCountActive: { color: Colors.lavender[300], fontFamily: Typography.fontFamily.bold },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadingText: { color: 'rgba(255,255,255,0.4)', fontSize: Typography.fontSize.sm },
+  emptyState: { alignItems: 'center', paddingVertical: 60, gap: 8 },
+  emptyEmoji: { fontSize: 48 },
+  emptyTitle: { fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.bold, color: '#fff' },
+  emptyBody: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.4)', textAlign: 'center' },
+  // Compose modal
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.7)' },
+  composeSheet: {
+    backgroundColor: '#1a0533',
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+    borderTopWidth: 1, borderColor: 'rgba(139,92,246,0.3)',
+  },
+  composeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  composeTitle: { fontSize: Typography.fontSize.md, fontFamily: Typography.fontFamily.bold, color: '#fff' },
+  closeBtn: { color: 'rgba(255,255,255,0.5)', fontSize: 20, padding: 4 },
+  composeInput: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    color: '#fff',
+    fontSize: Typography.fontSize.base,
+    minHeight: 120,
+    textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    fontFamily: Typography.fontFamily.regular,
+  },
+  charCount: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.3)', alignSelf: 'flex-end', marginTop: -8 },
+  composeCatRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  composeCatChip: {
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+  },
+  composeCatChipActive: { backgroundColor: Colors.primary[700], borderColor: Colors.primary[500] },
+  composeCatText: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.7)' },
+  anonRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  anonToggle: {
+    width: 44, height: 24, borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  anonToggleOn: { backgroundColor: Colors.primary[600] },
+  anonThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.4)' },
+  anonThumbOn: { backgroundColor: '#fff', alignSelf: 'flex-end' },
+  anonLabel: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.7)' },
+  submitBtn: {
+    backgroundColor: Colors.primary[600], borderRadius: BorderRadius.lg,
+    padding: Spacing.md, alignItems: 'center',
+  },
+  submitBtnDisabled: { backgroundColor: 'rgba(255,255,255,0.1)' },
+  submitBtnText: { color: '#fff', fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold },
 })
