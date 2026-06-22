@@ -68,7 +68,7 @@ export default function PregnancyModeScreen() {
     Alert.alert('¡Modo embarazo activado!', `Fecha de inicio: ${d.format('D [de] MMMM YYYY')}`)
   }
 
-  const trimesterInfo = pregnancy ? TRIMESTERS[pregnancy.trimester - 1] : null
+  const trimesterInfo = pregnancy ? (TRIMESTERS[pregnancy.trimester - 1] ?? TRIMESTERS[0]) : null
 
   return (
     <LinearGradient colors={['#0d0118', '#1a0533']} style={[styles.container, { paddingTop: insets.top }]}>
