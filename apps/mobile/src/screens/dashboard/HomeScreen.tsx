@@ -522,7 +522,7 @@ export default function HomeScreen() {
                   <View style={styles.ttcRow}>
                     <Text style={styles.ttcRowIcon}>🌟</Text>
                     <Text style={styles.ttcRowText}>
-                      Ventana fértil: {dayjs(cycleStore.fertileWindowStart).format('D MMM')} – {dayjs(cycleStore.fertileWindowEnd).format('D MMM')}
+                      Ventana fértil: {dayjs(cycleStore.fertileWindowStart).format('D MMM')} – {dayjs(cycleStore.fertileWindowEnd ?? cycleStore.fertileWindowStart).format('D MMM')}
                     </Text>
                   </View>
                 )}

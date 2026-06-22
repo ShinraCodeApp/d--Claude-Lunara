@@ -34,11 +34,17 @@ export default function ShareApkScreen() {
   const [copied, setCopied] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
   const appVersion = Constants.expoConfig?.version ?? '1.0.0'
+  const linkCopiedTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  React.useEffect(() => {
+    return () => { if (linkCopiedTimer.current) clearTimeout(linkCopiedTimer.current) }
+  }, [])
 
   const copyLink = () => {
     Clipboard.setString(DOWNLOAD_LINK)
     setLinkCopied(true)
-    setTimeout(() => setLinkCopied(false), 2500)
+    if (linkCopiedTimer.current) clearTimeout(linkCopiedTimer.current)
+    linkCopiedTimer.current = setTimeout(() => setLinkCopied(false), 2500)
   }
 
   const shareViaWhatsApp = async () => {

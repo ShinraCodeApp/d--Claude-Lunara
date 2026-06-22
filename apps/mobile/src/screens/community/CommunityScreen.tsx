@@ -129,7 +129,9 @@ export default function CommunityScreen() {
       }
     })
     if (!__DEV__) {
-      try { await apiClient.post(`/community/posts/${postId}/react`, { type }) } catch { }
+      try { await apiClient.post(`/community/posts/${postId}/react`, { type }) } catch (e) {
+        console.warn('[Community] react sync failed:', e)
+      }
     }
   }, [])
 
@@ -157,7 +159,7 @@ export default function CommunityScreen() {
           <View style={styles.postHeader}>
             <View style={styles.avatarCircle}>
               <Text style={styles.avatarText}>
-                {item.isAnonymous ? '🌙' : item.authorName[0]}
+                {item.isAnonymous ? '🌙' : (item.authorName?.[0] ?? '?')}
               </Text>
             </View>
             <View style={{ flex: 1 }}>
@@ -187,7 +189,7 @@ export default function CommunityScreen() {
             >
               <Text style={styles.reactIcon}>❤️</Text>
               <Text style={[styles.reactCount, liked && styles.reactCountActive]}>
-                {item.likesCount + (liked && !item.myReactions.includes('like') ? 1 : !liked && item.myReactions.includes('like') ? -1 : 0)}
+                {item.likesCount + (liked === item.myReactions.includes('like') ? 0 : liked ? 1 : -1)}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -196,7 +198,7 @@ export default function CommunityScreen() {
             >
               <Text style={styles.reactIcon}>🤗</Text>
               <Text style={[styles.reactCount, hugged && styles.reactCountActive]}>
-                {item.hugsCount + (hugged && !item.myReactions.includes('hug') ? 1 : !hugged && item.myReactions.includes('hug') ? -1 : 0)}
+                {item.hugsCount + (hugged === item.myReactions.includes('hug') ? 0 : hugged ? 1 : -1)}
               </Text>
             </TouchableOpacity>
           </View>

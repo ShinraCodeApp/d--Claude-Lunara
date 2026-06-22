@@ -176,8 +176,12 @@ export default function HealthConnectScreen() {
   const [grantedCount, setGrantedCount] = useState<number | null>(null)
   const [sensorAvailable, setSensorAvailable] = useState<boolean | null>(null)
 
-  // Reset sync state when changing provider
+  const activeProvider = React.useRef<ProviderKey>(selected)
+
+  // Reset sync state when changing provider — also cancels any in-flight sync
   useEffect(() => {
+    activeProvider.current = selected
+    setLoading(false)
     setSynced(false)
     setData(EMPTY_DATA)
     setError(null)
@@ -187,17 +191,20 @@ export default function HealthConnectScreen() {
   }, [selected])
 
   const handleSync = useCallback(async () => {
+    const providerAtStart = selected
     setLoading(true)
     setError(null)
 
     if (selected === 'health_connect') {
       const r = await syncHealthConnect()
+      if (activeProvider.current !== providerAtStart) return
       setData(r.data)
       setSdkStatus(r.sdkStatus ?? null)
       setGrantedCount(r.grantedCount ?? null)
       if (r.error) setError(r.error)
     } else if (selected === 'native_sensor') {
       const r = await syncNativeSensor()
+      if (activeProvider.current !== providerAtStart) return
       setData(r.data)
       setSensorAvailable(r.available ?? null)
       if (r.error) setError(r.error)
@@ -208,7 +215,7 @@ export default function HealthConnectScreen() {
   }, [selected])
 
   const hasData = Object.values(data).some((v) => v !== null)
-  const selectedProvider = PROVIDERS.find((p) => p.id === selected)!
+  const selectedProvider = PROVIDERS.find((p) => p.id === selected) ?? PROVIDERS[0]
 
   return (
     <LinearGradient colors={['#0d0118', '#1a0533']} style={styles.container}>
