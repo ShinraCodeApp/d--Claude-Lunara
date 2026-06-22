@@ -18,7 +18,7 @@ const SHINRA_LOGO = require('../../../assets/images/ShinraCodeLogo1.png')
 // ─── Configura aquí el link de descarga (Google Drive, Dropbox, etc.) ─────────
 // Cuando subas el APK a Google Drive, reemplaza este valor con el link público.
 // Ejemplo: https://drive.google.com/file/d/XXXX/view?usp=sharing
-const DOWNLOAD_LINK = 'https://drive.google.com/file/d/1-1rtqPLfG2mZWd4siXoEC_hafE9IU8zq/view?usp=sharing'
+const DOWNLOAD_LINK = 'https://github.com/ShinraCodeApp/d--Claude-Lunara/releases/download/v1.0.0/Lunara-v1.0.0-release.apk'
 
 const SHARE_MSG =
   `🌙 *Lunara by ShinraCode* — App de salud femenina con IA\n\n` +
