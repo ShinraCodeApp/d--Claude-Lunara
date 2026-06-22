@@ -1,15 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Dimensions, ActivityIndicator, Alert,
+  ScrollView, Dimensions, ActivityIndicator, Alert, AppState, AppStateStatus, Linking,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated'
-import {
-  withIAPContext, useIAP,
-  requestSubscription, getAvailablePurchases, finishTransaction,
-} from 'react-native-iap'
 import { useQueryClient } from '@tanstack/react-query'
 import * as Haptics from 'expo-haptics'
 import { router } from 'expo-router'
@@ -20,9 +16,14 @@ import apiClient from '@/api/client'
 
 const { width } = Dimensions.get('window')
 
-const SKUS = {
-  monthly: 'com.shinracode.lunara.premium.monthly',
-  annual:  'com.shinracode.lunara.premium.annual',
+const PRICES = {
+  monthly: { display: '$4.99', monthly: 'por mes' },
+  annual:  { display: '$34.99', monthly: '$2.92/mes · Ahorra 42%' },
+}
+
+const PLAN_COLORS = {
+  monthly: ['#7c3aed', '#a855f7'] as const,
+  annual:  ['#d97706', '#f59e0b'] as const,
 }
 
 const FEATURES_PREMIUM = [
@@ -38,156 +39,107 @@ const FEATURES_PREMIUM = [
   '🎯 Recomendaciones personalizadas IA',
 ]
 
-const PLAN_COLORS = {
-  monthly: ['#7c3aed', '#a855f7'] as const,
-  annual:  ['#d97706', '#f59e0b'] as const,
-}
-
 const COMPARISON_ROWS = [
-  { feature: 'Registro del ciclo',          free: '✓',      premium: '✓' },
-  { feature: 'Predicción de período',        free: '✓',      premium: '✓' },
-  { feature: 'Síntomas y estado de ánimo',  free: '✓',      premium: '✓' },
-  { feature: 'Calendario con emojis',        free: '✓',      premium: '✓' },
-  { feature: 'Jardín Lunar',                 free: 'Básico', premium: 'Completo + 2x XP' },
-  { feature: 'Chat con Luna IA',             free: '5/mes',  premium: 'Ilimitado 🤖' },
-  { feature: 'Informes PDF',                 free: '✗',      premium: '✓' },
-  { feature: 'Análisis de patrones',         free: 'Básico', premium: 'Avanzado 📊' },
-  { feature: 'Temperatura basal (BBT)',      free: '✗',      premium: '✓ 🌡️' },
-  { feature: 'Sincronización en la nube',    free: '✗',      premium: '✓ ☁️' },
-  { feature: 'Comparación de ciclos',        free: '2 ciclos', premium: 'Ilimitado' },
-  { feature: 'Publicidad',                   free: 'Sí',     premium: 'Sin anuncios 🚫' },
-  { feature: 'Modo pareja',                  free: '✗',      premium: '✓ 💑' },
-  { feature: 'Recomendaciones IA',           free: '✗',      premium: 'Personalizadas 🎯' },
+  { feature: 'Registro del ciclo',         free: '✓',        premium: '✓' },
+  { feature: 'Predicción de período',       free: '✓',        premium: '✓' },
+  { feature: 'Síntomas y estado de ánimo', free: '✓',        premium: '✓' },
+  { feature: 'Calendario con emojis',       free: '✓',        premium: '✓' },
+  { feature: 'Jardín Lunar',                free: 'Básico',   premium: 'Completo + 2x XP' },
+  { feature: 'Chat con Luna IA',            free: '5/mes',    premium: 'Ilimitado 🤖' },
+  { feature: 'Informes PDF',                free: '✗',        premium: '✓' },
+  { feature: 'Análisis de patrones',        free: 'Básico',   premium: 'Avanzado 📊' },
+  { feature: 'Temperatura basal (BBT)',     free: '✗',        premium: '✓ 🌡️' },
+  { feature: 'Sincronización en la nube',   free: '✗',        premium: '✓ ☁️' },
+  { feature: 'Comparación de ciclos',       free: '2 ciclos', premium: 'Ilimitado' },
+  { feature: 'Publicidad',                  free: 'Sí',       premium: 'Sin anuncios 🚫' },
+  { feature: 'Modo pareja',                 free: '✗',        premium: '✓ 💑' },
+  { feature: 'Recomendaciones IA',          free: '✗',        premium: 'Personalizadas 🎯' },
 ]
 
-function PremiumScreenInner() {
+export default function PremiumScreen() {
   const insets = useSafeAreaInsets()
   const { user } = useAuthStore()
   const queryClient = useQueryClient()
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('annual')
   const [purchasing, setPurchasing] = useState(false)
-  const [restoring, setRestoring] = useState(false)
-
-  const { subscriptions, getSubscriptions, currentPurchase, currentPurchaseError } = useIAP()
+  const appState = useRef<AppStateStatus>(AppState.currentState)
+  const waitingForPayment = useRef(false)
 
   const isPremium = user?.subscription?.isPremium
 
+  // Cuando el usuario vuelve a la app después de pagar en MP
   useEffect(() => {
-    getSubscriptions({ skus: Object.values(SKUS) })
-  }, [])
-
-  useEffect(() => {
-    if (!currentPurchase) return
-    const complete = async () => {
-      try {
-        await finishTransaction({ purchase: currentPurchase, isConsumable: false })
-
-        // Notify backend to activate Premium in DB
+    const sub = AppState.addEventListener('change', async (nextState) => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextState === 'active' &&
+        waitingForPayment.current
+      ) {
+        waitingForPayment.current = false
+        setPurchasing(true)
         try {
-          const { data } = await apiClient.post('/subscriptions/activate', {
-            productId: currentPurchase.productId,
-            purchaseToken: currentPurchase.purchaseToken ?? currentPurchase.transactionReceipt,
-            platform: 'android',
-          })
-          const current = useAuthStore.getState().user
-          if (current) {
-            useAuthStore.getState().setUser({
-              ...current,
-              subscription: {
-                tier: data.tier,
-                status: 'active',
-                isPremium: true,
-                currentPeriodEnd: data.currentPeriodEnd,
-              },
-            })
+          const { data } = await apiClient.get('/subscriptions/status')
+          if (data.isPremium) {
+            const current = useAuthStore.getState().user
+            if (current) {
+              useAuthStore.getState().setUser({
+                ...current,
+                subscription: {
+                  tier: data.tier,
+                  status: 'active',
+                  isPremium: true,
+                  currentPeriodEnd: data.currentPeriodEnd,
+                },
+              })
+            }
+            queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+            Alert.alert(
+              '🎉 ¡Bienvenida a Premium!',
+              'Tu suscripción está activa. Disfruta todas las funciones.',
+              [{ text: 'Genial', onPress: () => router.back() }],
+            )
+          } else {
+            // Pago pendiente o fallido
+            Alert.alert(
+              'Verificando pago...',
+              'Si completaste el pago, puede tardar unos minutos en procesarse. Cerrá y volvé a abrir la app si no se activa.',
+            )
           }
         } catch {
-          // Fallback: update local state only
-          const current = useAuthStore.getState().user
-          if (current) {
-            useAuthStore.getState().setUser({
-              ...current,
-              subscription: { tier: 'PREMIUM_MONTHLY', status: 'active', isPremium: true },
-            })
-          }
+          // No mostramos error — el webhook de MP lo activará en background
+        } finally {
+          setPurchasing(false)
         }
-
-        queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-        Alert.alert('🎉 ¡Bienvenida a Premium!', 'Tu suscripción está activa. Disfruta todas las funciones.', [
-          { text: 'Genial', onPress: () => router.back() },
-        ])
-      } finally {
-        setPurchasing(false)
       }
-    }
-    complete()
-  }, [currentPurchase])
-
-  useEffect(() => {
-    if (currentPurchaseError) {
-      setPurchasing(false)
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-    }
-  }, [currentPurchaseError])
-
-  const getSub = (plan: 'monthly' | 'annual') =>
-    subscriptions.find((s) => s.productId === SKUS[plan])
-
-  const getPrice = (plan: 'monthly' | 'annual'): string => {
-    const sub = getSub(plan) as any
-    const price = sub?.subscriptionOfferDetails?.[0]?.pricingPhases?.pricingPhaseList?.[0]?.formattedPrice
-    return price ?? (plan === 'monthly' ? '$4.99' : '$34.99')
-  }
-
-  const getAnnualMonthly = (): string => {
-    const sub = getSub('annual') as any
-    const micros = sub?.subscriptionOfferDetails?.[0]?.pricingPhases?.pricingPhaseList?.[0]?.priceAmountMicros
-    if (!micros) return '$2.92/mes'
-    return `$${(Number(micros) / 1_000_000 / 12).toFixed(2)}/mes`
-  }
+      appState.current = nextState
+    })
+    return () => sub.remove()
+  }, [])
 
   const handlePurchase = async () => {
-    const sku = SKUS[selectedPlan]
-    const sub = getSub(selectedPlan) as any
     try {
       setPurchasing(true)
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
-      const offerToken = sub?.subscriptionOfferDetails?.[0]?.offerToken
-      await requestSubscription({
-        sku,
-        ...(offerToken ? { subscriptionOffers: [{ sku, offerToken }] } : {}),
-      })
-    } catch (e: any) {
-      if (e?.code !== 'E_USER_CANCELLED') {
-        Alert.alert('Error', 'No se pudo completar la compra. Intenta de nuevo.')
-      }
-      setPurchasing(false)
-    }
-  }
 
-  const handleRestore = async () => {
-    try {
-      setRestoring(true)
-      const purchases = await getAvailablePurchases()
-      const hasActive = purchases.some((p) => Object.values(SKUS).includes(p.productId))
-      if (hasActive) {
-        const current = useAuthStore.getState().user
-        if (current) {
-          useAuthStore.getState().setUser({
-            ...current,
-            subscription: { tier: 'premium', status: 'active', isPremium: true },
-          })
-        }
-        queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
-        Alert.alert('✓ Compras restauradas', 'Tu suscripción Premium está activa.')
-      } else {
-        Alert.alert('Sin compras', 'No encontramos suscripciones activas en esta cuenta.')
+      const { data } = await apiClient.post('/subscriptions/mp/create-preference', {
+        plan: selectedPlan,
+      })
+
+      if (!data.initPoint) {
+        throw new Error('No se recibió el link de pago')
       }
-    } catch {
-      Alert.alert('Error', 'No se pudieron restaurar las compras.')
-    } finally {
-      setRestoring(false)
+
+      waitingForPayment.current = true
+      const opened = await Linking.canOpenURL(data.initPoint)
+      if (!opened) throw new Error('No se pudo abrir el link de pago')
+      await Linking.openURL(data.initPoint)
+      // La app queda en background — el AppState listener lo toma cuando vuelve
+      setPurchasing(false)
+    } catch (e: any) {
+      setPurchasing(false)
+      waitingForPayment.current = false
+      Alert.alert('Error', e?.response?.data?.error ?? 'No se pudo iniciar el pago. Intenta de nuevo.')
     }
   }
 
@@ -241,8 +193,8 @@ function PremiumScreenInner() {
                 <Text style={styles.planBadgeText}>MEJOR VALOR 🔥</Text>
               </View>
               <Text style={styles.planPeriod}>Anual</Text>
-              <Text style={styles.planPrice}>{getPrice('annual')}</Text>
-              <Text style={styles.planMonthly}>{getAnnualMonthly()} · Ahorra 42%</Text>
+              <Text style={styles.planPrice}>{PRICES.annual.display}</Text>
+              <Text style={styles.planMonthly}>{PRICES.annual.monthly}</Text>
               <View style={[styles.radioCircle, selectedPlan === 'annual' && styles.radioCircleSelected]}>
                 {selectedPlan === 'annual' && <View style={styles.radioFill} />}
               </View>
@@ -258,8 +210,8 @@ function PremiumScreenInner() {
               style={styles.planGradient}
             >
               <Text style={styles.planPeriod}>Mensual</Text>
-              <Text style={styles.planPrice}>{getPrice('monthly')}</Text>
-              <Text style={styles.planMonthly}>por mes</Text>
+              <Text style={styles.planPrice}>{PRICES.monthly.display}</Text>
+              <Text style={styles.planMonthly}>{PRICES.monthly.monthly}</Text>
               <View style={[styles.radioCircle, selectedPlan === 'monthly' && styles.radioCircleSelected]}>
                 {selectedPlan === 'monthly' && <View style={styles.radioFill} />}
               </View>
@@ -267,7 +219,7 @@ function PremiumScreenInner() {
           </TouchableOpacity>
         </Animated.View>
 
-        {/* CTA */}
+        {/* CTA — MercadoPago */}
         <Animated.View entering={ZoomIn.delay(200)}>
           <TouchableOpacity
             style={styles.purchaseBtn}
@@ -275,17 +227,38 @@ function PremiumScreenInner() {
             disabled={purchasing}
           >
             <LinearGradient
-              colors={selectedPlan === 'annual' ? PLAN_COLORS.annual : PLAN_COLORS.monthly}
+              colors={['#009ee3', '#007eb5']}
               style={styles.purchaseBtnGradient}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
             >
               {purchasing
                 ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.purchaseBtnText}>Comenzar prueba gratuita de 7 días 🌙</Text>
-              }
+                : (
+                  <View style={styles.mpBtnContent}>
+                    <Text style={styles.purchaseBtnText}>Pagar con </Text>
+                    <Text style={styles.mpBtnBrand}>MercadoPago</Text>
+                  </View>
+                )}
             </LinearGradient>
           </TouchableOpacity>
-          <Text style={styles.trialNote}>Prueba 7 días gratis · Cancela cuando quieras</Text>
+          <Text style={styles.trialNote}>
+            Pago único · {selectedPlan === 'annual' ? '365 días' : '30 días'} de acceso Premium · Sin renovación automática
+          </Text>
+        </Animated.View>
+
+        {/* MP info */}
+        <Animated.View entering={FadeInDown.delay(250)} style={styles.mpInfoCard}>
+          <Text style={styles.mpInfoTitle}>💳 ¿Cómo funciona?</Text>
+          {[
+            'Tocá "Pagar con MercadoPago" — se abre el checkout',
+            'Pagá con tarjeta, dinero en cuenta MP o cuotas',
+            'Volvé a la app — tu Premium se activa en segundos',
+          ].map((step, i) => (
+            <View key={i} style={styles.mpInfoRow}>
+              <Text style={styles.mpInfoNum}>{i + 1}</Text>
+              <Text style={styles.mpInfoText}>{step}</Text>
+            </View>
+          ))}
         </Animated.View>
 
         {/* Comparison table */}
@@ -336,12 +309,8 @@ function PremiumScreenInner() {
           ))}
         </Animated.View>
 
-        {/* Restore & Legal */}
+        {/* Legal */}
         <View style={styles.legalContainer}>
-          <TouchableOpacity onPress={handleRestore} disabled={restoring}>
-            <Text style={styles.legalLink}>{restoring ? 'Restaurando...' : 'Restaurar compras'}</Text>
-          </TouchableOpacity>
-          <Text style={styles.legalDot}>·</Text>
           <TouchableOpacity onPress={() => router.push('/privacy-policy' as any)}>
             <Text style={styles.legalLink}>Política de privacidad</Text>
           </TouchableOpacity>
@@ -352,14 +321,12 @@ function PremiumScreenInner() {
         </View>
 
         <Text style={styles.legalText}>
-          El pago se cargará a tu cuenta de Google Play. La suscripción se renueva automáticamente a menos que se cancele al menos 24 horas antes del final del período actual. Puedes gestionar y cancelar tu suscripción desde la configuración de tu cuenta en Google Play.
+          El pago se procesa de forma segura a través de MercadoPago. El acceso Premium se activa por {selectedPlan === 'annual' ? '365' : '30'} días desde la confirmación del pago.
         </Text>
       </ScrollView>
     </LinearGradient>
   )
 }
-
-export default withIAPContext(PremiumScreenInner)
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -397,7 +364,7 @@ const styles = StyleSheet.create({
     marginTop: 24, fontFamily: Typography.fontFamily.medium,
   },
   planPrice: { fontSize: Typography.fontSize['2xl'], fontFamily: Typography.fontFamily.bold, color: '#fff' },
-  planMonthly: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.6)' },
+  planMonthly: { fontSize: Typography.fontSize.xs, color: 'rgba(255,255,255,0.6)', textAlign: 'center' },
   radioCircle: {
     width: 20, height: 20, borderRadius: 10, borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.4)', alignItems: 'center', justifyContent: 'center',
@@ -407,11 +374,27 @@ const styles = StyleSheet.create({
   radioFill: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#fff' },
   purchaseBtn: { borderRadius: BorderRadius.xl, overflow: 'hidden', marginBottom: Spacing.sm },
   purchaseBtnGradient: { paddingVertical: Spacing.md + 4, alignItems: 'center' },
+  mpBtnContent: { flexDirection: 'row', alignItems: 'center' },
   purchaseBtnText: { color: '#fff', fontSize: Typography.fontSize.md, fontFamily: Typography.fontFamily.bold },
+  mpBtnBrand: { color: '#fff', fontSize: Typography.fontSize.md, fontFamily: Typography.fontFamily.bold, textDecorationLine: 'underline' },
   trialNote: {
     textAlign: 'center', fontSize: Typography.fontSize.xs,
     color: 'rgba(255,255,255,0.5)', marginBottom: Spacing.xl,
   },
+  mpInfoCard: {
+    backgroundColor: 'rgba(0,158,227,0.1)', borderRadius: BorderRadius.xl,
+    padding: Spacing.md, marginBottom: Spacing.xl,
+    borderWidth: 1, borderColor: 'rgba(0,158,227,0.25)',
+    gap: Spacing.sm,
+  },
+  mpInfoTitle: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: '#fff', marginBottom: 4 },
+  mpInfoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
+  mpInfoNum: {
+    width: 22, height: 22, borderRadius: 11, textAlign: 'center', lineHeight: 22,
+    backgroundColor: '#009ee3', color: '#fff', fontSize: 12, fontFamily: Typography.fontFamily.bold,
+    overflow: 'hidden',
+  },
+  mpInfoText: { flex: 1, fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.7)', lineHeight: 20 },
   featuresSection: { marginBottom: Spacing.xl },
   featuresTitle: {
     fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.bold,

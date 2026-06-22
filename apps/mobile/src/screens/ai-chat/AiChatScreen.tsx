@@ -143,7 +143,7 @@ export default function AiChatScreen() {
 
       // Backend offline → generar respuesta local con datos reales del usuario
       setIsOffline(true)
-      const lastUserMsg = sendMutation.variables as string
+      const lastUserMsg = (sendMutation.variables as string | undefined) ?? ''
       const localResponse = generateLocalResponse(
         lastUserMsg ?? '',
         cycleStore.currentPhase,

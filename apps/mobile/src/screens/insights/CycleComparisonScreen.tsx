@@ -83,13 +83,13 @@ export default function CycleComparisonScreen() {
   const getCycleSummary = (cycle: CycleSlice) => ({
     length: cycle.totalDays,
     periodDays: cycle.periodDays,
-    avgSleep: avg(cycle.logs.filter((l) => l.sleep).map((l) => l.sleep!.hours)),
-    avgWater: avg(cycle.logs.filter((l) => l.water).map((l) => l.water!)),
+    avgSleep: avg(cycle.logs.filter((l) => l.sleep?.hours != null).map((l) => l.sleep!.hours)),
+    avgWater: avg(cycle.logs.filter((l) => l.water != null).map((l) => l.water!)),
     topMood: topItem(cycle.logs.filter((l) => l.mood).map((l) => MOOD_LABELS[l.mood!] ?? l.mood!)),
-    topSymptom: topItem(cycle.logs.flatMap((l) => l.symptoms)),
+    topSymptom: topItem(cycle.logs.flatMap((l) => l.symptoms ?? [])),
     migraineCount: cycle.logs.filter((l) => l.migraine).length,
     logsTotal: cycle.logs.length,
-    avgBbt: avg(cycle.logs.filter((l) => l.bbt).map((l) => l.bbt!)),
+    avgBbt: avg(cycle.logs.filter((l) => l.bbt != null).map((l) => l.bbt!)),
   })
 
   const renderBar = (value: number, max: number, color: string) => {

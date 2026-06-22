@@ -236,7 +236,7 @@ export default function ProfileScreen() {
         },
         {
           id: 'terms', icon: '📄', label: 'Términos de servicio', type: 'nav',
-          onPress: () => {},
+          onPress: () => router.push('/privacy-policy' as any),
         },
       ],
     },
@@ -257,15 +257,15 @@ export default function ProfileScreen() {
         },
         {
           id: 'help', icon: '❓', label: 'Centro de ayuda', type: 'nav',
-          onPress: () => {},
+          onPress: () => Linking.openURL('https://wa.me/5491100000000?text=Hola,%20necesito%20ayuda%20con%20Lunara'),
         },
         {
           id: 'feedback', icon: '💌', label: 'Enviar comentarios', type: 'nav',
-          onPress: () => {},
+          onPress: () => Linking.openURL('mailto:yamilrueda88@gmail.com?subject=Feedback%20Lunara'),
         },
         {
           id: 'rate', icon: '⭐', label: 'Valorar la app', type: 'nav',
-          onPress: () => {},
+          onPress: () => Linking.openURL('https://play.google.com/store/apps/details?id=com.shinracode.lunara'),
         },
       ],
     },

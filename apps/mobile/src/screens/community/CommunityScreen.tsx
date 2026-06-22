@@ -178,6 +178,7 @@ export default function CommunityScreen() {
                 {CATEGORY_ICON[item.category as Category] ?? '💬'}
               </Text>
             </View>
+
           </View>
 
           <Text style={styles.postContent}>{item.content}</Text>
