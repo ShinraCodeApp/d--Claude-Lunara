@@ -9,6 +9,7 @@ import * as SplashScreen from 'expo-splash-screen'
 import { useFonts, Nunito_400Regular, Nunito_500Medium, Nunito_700Bold, Nunito_800ExtraBold } from '@expo-google-fonts/nunito'
 import { PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display'
 import * as Sentry from '@sentry/react-native'
+import { ThemeProvider, useAppTheme } from '@/context/ThemeContext'
 
 import * as Notifications from 'expo-notifications'
 import { useAuthStore, useSettingsStore, useCycleStore, useGardenStore, useSymptomStore } from '@/store'
@@ -182,8 +183,11 @@ function RootLayoutNav() {
     return () => sub.remove()
   }, [])
 
+  const { isDark } = useAppTheme()
+
   return (
     <>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="auth" />
@@ -217,6 +221,7 @@ function RootLayoutNav() {
         <Stack.Screen name="community" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="insights/pdf-report" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="health/health-connect" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="learn" options={{ animation: 'slide_from_right' }} />
       </Stack>
       {!hasSeenPrivacyConsent && !__DEV__ && (
         <View style={StyleSheet.absoluteFill}>
@@ -251,8 +256,9 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <StatusBar style="light" />
-          <RootLayoutNav />
+          <ThemeProvider>
+            <RootLayoutNav />
+          </ThemeProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

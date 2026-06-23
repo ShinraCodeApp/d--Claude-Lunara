@@ -1,12 +1,12 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
   Dimensions, ScrollView, TextInput,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import Animated, {
-  useAnimatedStyle, useSharedValue, withSpring,
-  withTiming, interpolate, Extrapolation, FadeInDown,
+  useAnimatedStyle, useSharedValue,
+  withTiming, FadeInDown,
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
@@ -55,12 +55,13 @@ interface OnboardingData {
 }
 
 const STEPS = [
-  { key: 'welcome',    title: '¡Bienvenida a Lunara!',   subtitle: 'Tu compañera de salud femenina' },
-  { key: 'name',       title: '¿Cómo te llamamos?',       subtitle: 'Esto es completamente opcional' },
-  { key: 'experience', title: '¿Es tu primer período?',   subtitle: 'Así podemos guiarte mejor' },
-  { key: 'goals',      title: '¿Cuál es tu objetivo?',    subtitle: 'Elige todos los que apliquen' },
-  { key: 'cycle',      title: 'Tu ciclo menstrual',       subtitle: 'Esto nos ayuda a calcular predicciones' },
-  { key: 'mascot',     title: 'Conoce a Luna',            subtitle: 'Tu guía personal de salud' },
+  { key: 'welcome',        title: '¡Bienvenida a Lunara!',    subtitle: 'Tu compañera de salud femenina' },
+  { key: 'name',           title: '¿Cómo te llamamos?',        subtitle: 'Esto es completamente opcional' },
+  { key: 'experience',     title: '¿Es tu primer período?',    subtitle: 'Así podemos guiarte mejor' },
+  { key: 'goals',          title: '¿Cuál es tu objetivo?',     subtitle: 'Elige todos los que apliquen' },
+  { key: 'contraceptive',  title: '¿Usas algún anticonceptivo?', subtitle: 'Para personalizar tus notificaciones' },
+  { key: 'cycle',          title: 'Tu ciclo menstrual',        subtitle: 'Esto nos ayuda a calcular predicciones' },
+  { key: 'mascot',         title: 'Conoce a Luna',             subtitle: 'Tu guía personal de salud' },
 ]
 
 export default function OnboardingScreen() {
@@ -80,9 +81,12 @@ export default function OnboardingScreen() {
     useMascot: true,
   })
 
-  const progress = useSharedValue(0)
+  const progress = useSharedValue((1 / STEPS.length) * 100)
+  useEffect(() => {
+    progress.value = withTiming(((step + 1) / STEPS.length) * 100, { duration: 350 })
+  }, [step])
   const progressStyle = useAnimatedStyle(() => ({
-    width: `${((step + 1) / STEPS.length) * 100}%`,
+    width: `${progress.value}%`,
   }))
 
   const finishOnboarding = () => {
@@ -114,6 +118,7 @@ export default function OnboardingScreen() {
   })
 
   const canAdvance = !(STEPS[step].key === 'experience' && data.isFirstPeriod === null)
+                  && !(STEPS[step].key === 'contraceptive' && !data.contraceptive)
 
   const nextStep = () => {
     if (!canAdvance) return
@@ -196,6 +201,11 @@ export default function OnboardingScreen() {
             <Text style={styles.privacyNote}>
               🔒 Tu nombre solo se guarda en tu perfil y nunca se comparte
             </Text>
+            <TouchableOpacity onPress={nextStep} style={{ marginTop: Spacing.md }}>
+              <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: Typography.fontSize.sm, textAlign: 'center' }}>
+                Saltar este paso →
+              </Text>
+            </TouchableOpacity>
           </Animated.View>
         )}
 
@@ -285,8 +295,39 @@ export default function OnboardingScreen() {
           </Animated.View>
         )}
 
-        {/* ─── Step: Cycle ─────────────────────────────── */}
+        {/* ─── Step: Contraceptive ───────────────────── */}
         {step === 4 && (
+          <Animated.View entering={FadeInDown} style={styles.stepContent}>
+            <Text style={styles.heroEmoji}>💊</Text>
+            <Text style={styles.heroTitle}>{currentStep.title}</Text>
+            <Text style={styles.heroSubtitle}>{currentStep.subtitle}</Text>
+
+            <View style={styles.goalsGrid}>
+              {CONTRACEPTIVES.map((c) => (
+                <TouchableOpacity
+                  key={c.key}
+                  style={[styles.goalBtn, data.contraceptive === c.key && styles.goalBtnSelected]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                    setData((d) => ({ ...d, contraceptive: c.key }))
+                  }}
+                >
+                  <Text style={styles.goalEmoji}>{c.emoji}</Text>
+                  <Text style={[styles.goalLabel, data.contraceptive === c.key && styles.goalLabelSelected]}>
+                    {c.label}
+                  </Text>
+                  {data.contraceptive === c.key && (
+                    <View style={styles.goalCheck}><Text style={styles.goalCheckText}>✓</Text></View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.tipText}>💡 Podés cambiarlo después en Configuración</Text>
+          </Animated.View>
+        )}
+
+        {/* ─── Step: Cycle ─────────────────────────────── */}
+        {step === 5 && (
           <Animated.View entering={FadeInDown} style={styles.stepContent}>
             <Text style={styles.heroEmoji}>🌑</Text>
             <Text style={styles.heroTitle}>{currentStep.title}</Text>
@@ -361,7 +402,7 @@ export default function OnboardingScreen() {
         )}
 
         {/* ─── Step: Mascot ─────────────────────────────── */}
-        {step === 5 && (
+        {step === 6 && (
           <Animated.View entering={FadeInDown} style={styles.stepContent}>
             <Text style={[styles.heroEmoji, { fontSize: 80 }]}>🌙</Text>
             <Text style={styles.heroTitle}>¡Hola! Soy Luna</Text>

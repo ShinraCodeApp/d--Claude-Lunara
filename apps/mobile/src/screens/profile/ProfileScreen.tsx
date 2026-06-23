@@ -244,6 +244,10 @@ export default function ProfileScreen() {
       title: 'Soporte',
       items: [
         {
+          id: 'learn', icon: '📚', label: 'Aprende sobre tu ciclo', type: 'nav',
+          onPress: () => router.push('/learn' as any),
+        },
+        {
           id: 'community', icon: '🤝', label: 'Comunidad y consejos', type: 'nav',
           onPress: () => router.push('/community'),
         },

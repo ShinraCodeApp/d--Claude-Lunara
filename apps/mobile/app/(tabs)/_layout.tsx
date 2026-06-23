@@ -3,6 +3,7 @@ import { Platform, View, Text, StyleSheet } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { BlurView } from 'expo-blur'
 import { Colors, Typography, Spacing } from '@/theme'
+import { useAppTheme } from '@/context/ThemeContext'
 
 interface TabIconProps {
   icon: string
@@ -11,10 +12,12 @@ interface TabIconProps {
 }
 
 function TabIcon({ icon, label, focused }: TabIconProps) {
+  const { isDark } = useAppTheme()
+  const labelColor = isDark ? 'rgba(255,255,255,0.3)' : 'rgba(109,40,217,0.4)'
   return (
     <View style={styles.tabItem}>
       <Text style={[styles.tabIcon, focused && styles.tabIconFocused]}>{icon}</Text>
-      <Text style={[styles.tabLabel, focused && styles.tabLabelFocused]}>{label}</Text>
+      <Text style={[styles.tabLabel, { color: labelColor }, focused && styles.tabLabelFocused]}>{label}</Text>
       {focused && <View style={styles.tabDot} />}
     </View>
   )
@@ -22,6 +25,10 @@ function TabIcon({ icon, label, focused }: TabIconProps) {
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets()
+  const { isDark } = useAppTheme()
+
+  const tabBg = isDark ? '#1a0533' : Colors.primary[50]
+  const inactiveColor = isDark ? 'rgba(255,255,255,0.3)' : 'rgba(109,40,217,0.4)'
 
   return (
     <Tabs
@@ -33,7 +40,7 @@ export default function TabsLayout() {
           left: 0,
           right: 0,
           height: 60 + insets.bottom,
-          backgroundColor: Platform.OS === 'ios' ? 'transparent' : '#1a0533',
+          backgroundColor: Platform.OS === 'ios' ? 'transparent' : tabBg,
           borderTopColor: 'rgba(139,92,246,0.25)',
           borderTopWidth: 1,
           paddingBottom: insets.bottom,
@@ -43,13 +50,13 @@ export default function TabsLayout() {
           ? () => (
               <BlurView
                 intensity={80}
-                tint="dark"
+                tint={isDark ? 'dark' : 'light'}
                 style={StyleSheet.absoluteFill}
               />
             )
           : undefined,
         tabBarActiveTintColor: Colors.primary[400],
-        tabBarInactiveTintColor: 'rgba(255,255,255,0.3)',
+        tabBarInactiveTintColor: inactiveColor,
         tabBarShowLabel: false,
       }}
     >

@@ -8,12 +8,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeInDown } from 'react-native-reanimated'
 import * as Haptics from 'expo-haptics'
 import { router } from 'expo-router'
+import dayjs from 'dayjs'
 
 import {
   useAuthStore, useSettingsStore, useSymptomStore,
   useCycleStore, useGardenStore,
 } from '@/store'
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
+import { apiClient } from '@/api/client'
 
 export default function MyDataScreen() {
   const insets = useSafeAreaInsets()
@@ -24,6 +26,61 @@ export default function MyDataScreen() {
   const { language, pcosMode, ttcMode, pregnancyMode, resetSettings } = useSettingsStore() as any
   const [exporting, setExporting] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [backingUp, setBackingUp] = useState(false)
+  const [restoring, setRestoring] = useState(false)
+  const [lastBackupAt, setLastBackupAt] = useState<string | null>(null)
+
+  const handleCloudBackup = async () => {
+    setBackingUp(true)
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+    try {
+      const { data } = await apiClient.post('/users/backup', {
+        logs,
+        version: '1.0.1',
+        garden: { stage: gardenStore.stage, xp: gardenStore.xp, level: gardenStore.level, crystalBalance: gardenStore.crystalBalance, currentStreak: gardenStore.currentStreak },
+        cycle: { currentPhase, dayOfCycle },
+      })
+      setLastBackupAt(data.backupAt)
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      Alert.alert('☁️ Backup guardado', `${data.logsCount} registros guardados en la nube.`)
+    } catch {
+      Alert.alert('Error', 'No se pudo guardar el backup. Revisá tu conexión.')
+    } finally {
+      setBackingUp(false)
+    }
+  }
+
+  const handleCloudRestore = async () => {
+    Alert.alert(
+      '☁️ Restaurar desde la nube',
+      'Esto reemplazará los registros locales con el último backup guardado. ¿Continuar?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Restaurar', onPress: async () => {
+            setRestoring(true)
+            try {
+              const { data } = await apiClient.get('/users/backup')
+              const backup = data.backup as any
+              if (backup?.logs?.length) {
+                useSymptomStore.setState({ logs: backup.logs })
+              }
+              if (backup?.garden) {
+                useGardenStore.getState().setGarden(backup.garden)
+              }
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+              Alert.alert('✅ Restaurado', `${backup?.logs?.length ?? 0} registros restaurados desde el backup del ${dayjs(data.backupAt).format('D/M/YY HH:mm')}.`)
+            } catch (e: any) {
+              const msg = e?.response?.data?.error ?? 'No se pudo restaurar el backup.'
+              Alert.alert('Error', msg)
+            } finally {
+              setRestoring(false)
+            }
+          },
+        },
+      ]
+    )
+  }
 
   const handleExport = async () => {
     setExporting(true)
@@ -155,6 +212,45 @@ export default function MyDataScreen() {
               <Text style={styles.statLabel}>{stat.label}</Text>
             </View>
           ))}
+        </Animated.View>
+
+        {/* Cloud Backup */}
+        <Animated.View entering={FadeInDown.delay(80)} style={styles.section}>
+          <Text style={styles.sectionTitle}>☁️ Backup en la nube</Text>
+          <View style={styles.card}>
+            <Text style={styles.cardDesc}>
+              Guarda tus registros en nuestros servidores seguros. Si cambiás de celular, podés restaurarlos en cualquier momento.
+            </Text>
+            {lastBackupAt && (
+              <Text style={[styles.cardNote, { color: Colors.success, marginBottom: 8 }]}>
+                ✓ Último backup: {dayjs(lastBackupAt).format('D/M/YY HH:mm')}
+              </Text>
+            )}
+            <TouchableOpacity style={styles.actionBtn} onPress={handleCloudBackup} disabled={backingUp}>
+              <LinearGradient
+                colors={['#0ea5e9', '#6366f1']}
+                style={styles.actionBtnGradient}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              >
+                {backingUp
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.actionBtnText}>☁️ Guardar en la nube ({totalLogs} registros)</Text>
+                }
+              </LinearGradient>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionBtn, { marginTop: 8 }]} onPress={handleCloudRestore} disabled={restoring}>
+              <LinearGradient
+                colors={['#6366f1', '#8b5cf6']}
+                style={styles.actionBtnGradient}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              >
+                {restoring
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.actionBtnText}>↩️ Restaurar desde la nube</Text>
+                }
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         </Animated.View>
 
         {/* Export */}

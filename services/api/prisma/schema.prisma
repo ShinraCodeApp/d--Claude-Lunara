@@ -232,6 +232,10 @@ model UserProfile {
   onboardingCompleted Boolean         @default(false)
   setupStep           Int             @default(0)
 
+  // Mobile cloud backup (JSON blob of local store)
+  mobileBackup      Json?
+  mobileBackupAt    DateTime?
+
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 

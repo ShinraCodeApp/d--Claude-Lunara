@@ -2,10 +2,20 @@ import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { authenticate } from '@/middleware/auth.middleware'
 import { SubscriptionService } from './subscription.service'
+import { MercadoPagoService } from './subscription.mp.service'
 
 const subscriptionService = new SubscriptionService()
+const mpService = new MercadoPagoService()
 
 export async function subscriptionRoutes(app: FastifyInstance) {
+  // ─── MercadoPago webhook — sin auth (MP lo llama directamente) ───
+  app.post('/mp/webhook', { preHandler: [] }, async (req, reply) => {
+    const query = req.query as Record<string, string>
+    const body = req.body as Record<string, unknown>
+    await mpService.handleWebhook(query, body)
+    return reply.status(200).send({ received: true })
+  })
+
   app.addHook('preHandler', authenticate)
 
   // GET /subscriptions/status — current subscription
@@ -44,6 +54,24 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     }).parse(req.body)
 
     const result = await subscriptionService.restorePurchases(req.currentUser.id, body)
+    return reply.send(result)
+  })
+
+  // POST /subscriptions/mp/create-preference — crear preferencia de pago MP
+  app.post('/mp/create-preference', async (req, reply) => {
+    const body = z.object({
+      plan: z.enum(['monthly', 'annual']),
+    }).parse(req.body)
+
+    if (!process.env.MP_ACCESS_TOKEN) {
+      return reply.status(503).send({ error: 'MercadoPago no está configurado' })
+    }
+
+    const result = await mpService.createPreference(
+      req.currentUser.id,
+      body.plan,
+      req.currentUser.email,
+    )
     return reply.send(result)
   })
 

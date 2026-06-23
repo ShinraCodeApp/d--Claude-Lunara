@@ -23,6 +23,13 @@ const envSchema = z.object({
   REVENUECAT_API_KEY: z.string().optional(),
   REVENUECAT_WEBHOOK_SECRET: z.string().optional(),
 
+  // MercadoPago
+  MP_ACCESS_TOKEN: z.string().optional(),
+  MP_MONTHLY_PRICE: z.string().optional(),
+  MP_ANNUAL_PRICE: z.string().optional(),
+  MP_CURRENCY: z.string().default('ARS'),
+  API_URL: z.string().optional(),
+
   // AWS
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),

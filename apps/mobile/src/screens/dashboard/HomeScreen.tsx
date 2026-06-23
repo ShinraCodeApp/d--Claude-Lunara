@@ -23,6 +23,7 @@ import { useCurrentCycle } from '@/api/hooks/useCycle'
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '@/theme'
 import QuickLogSheet from '@/components/QuickLogSheet'
 import { updateWidgetFromCycleData } from '@/utils/widgetBridge'
+import { useAppTheme } from '@/context/ThemeContext'
 
 dayjs.extend(relativeTime)
 dayjs.locale('es')
@@ -106,6 +107,7 @@ export default function HomeScreen() {
   const [periodStarted, setPeriodStarted] = useState(false)
   const todayLog = getTodayLog()
   const logStreak = getStreak()
+  const { isDark, bgGradient, cardBg, textPrimary, textMuted, borderColor } = useAppTheme()
 
   const handlePeriodStart = (intensity: string) => {
     const today = dayjs().format('YYYY-MM-DD')
@@ -182,7 +184,7 @@ export default function HomeScreen() {
 
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: isDark ? Colors.dark.bg : Colors.light.bg }]}
       contentContainerStyle={{ paddingBottom: 100 }}
       showsVerticalScrollIndicator={false}
       refreshControl={
@@ -657,7 +659,6 @@ function QuickAction({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.dark.bg,
   },
   header: {
     paddingHorizontal: Spacing.md,

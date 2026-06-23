@@ -82,6 +82,44 @@ export async function userRoutes(app: FastifyInstance) {
     return reply.send({ message: 'Onboarding completado' })
   })
 
+  // POST /users/backup — save mobile local store to cloud
+  app.post('/backup', async (req, reply) => {
+    const body = z.object({
+      logs: z.array(z.any()),
+      settings: z.record(z.any()).optional(),
+      garden: z.record(z.any()).optional(),
+      cycle: z.record(z.any()).optional(),
+      version: z.string().optional(),
+    }).parse(req.body)
+
+    await prisma.userProfile.update({
+      where: { userId: req.currentUser.id },
+      data: {
+        mobileBackup: body as any,
+        mobileBackupAt: new Date(),
+      },
+    })
+
+    return reply.send({ message: 'Backup guardado', backupAt: new Date().toISOString(), logsCount: body.logs.length })
+  })
+
+  // GET /users/backup — restore mobile local store from cloud
+  app.get('/backup', async (req, reply) => {
+    const profile = await prisma.userProfile.findUnique({
+      where: { userId: req.currentUser.id },
+      select: { mobileBackup: true, mobileBackupAt: true },
+    })
+
+    if (!profile?.mobileBackup) {
+      return reply.status(404).send({ error: 'No hay backup guardado en la nube' })
+    }
+
+    return reply.send({
+      backup: profile.mobileBackup,
+      backupAt: profile.mobileBackupAt,
+    })
+  })
+
   // DELETE /users/account — GDPR right to be forgotten
   app.delete('/account', async (req, reply) => {
     const body = z.object({

@@ -31,8 +31,8 @@ export default function PdfReportScreen() {
   const { level, xp } = useGardenStore()
 
   const last90 = logs.filter((l) =>
-    dayjs(l.date).isAfter(dayjs().subtract(90, 'day'))
-  ).sort((a, b) => a.date.localeCompare(b.date))
+    l.date && dayjs(l.date).isAfter(dayjs().subtract(90, 'day'))
+  ).sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''))
 
   const totalLogs = last90.length
   const periodDays = last90.filter((l) => l.phase === 'menstrual').length
@@ -44,7 +44,7 @@ export default function PdfReportScreen() {
   const topMood = Object.entries(moodCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—'
 
   const symptomCount: Record<string, number> = {}
-  last90.forEach((l) => l.symptoms.forEach((s) => { symptomCount[s] = (symptomCount[s] ?? 0) + 1 }))
+  last90.forEach((l) => (l.symptoms ?? []).forEach((s) => { symptomCount[s] = (symptomCount[s] ?? 0) + 1 }))
   const topSymptoms = Object.entries(symptomCount).sort((a, b) => b[1] - a[1]).slice(0, 5)
 
   const migraineCount = last90.filter((l) => (l as any).migraine).length
@@ -62,7 +62,7 @@ export default function PdfReportScreen() {
         <td>${l.energy ?? '—'}</td>
         <td>${l.sleep?.hours ?? '—'}h</td>
         <td>${(l as any).flowIntensity ?? (l.phase === 'menstrual' ? '✓' : '—')}</td>
-        <td>${l.symptoms.length > 0 ? l.symptoms.slice(0, 2).join(', ') : '—'}</td>
+        <td>${(l.symptoms ?? []).length > 0 ? (l.symptoms ?? []).slice(0, 2).join(', ') : '—'}</td>
       </tr>
     `).join('')
 
