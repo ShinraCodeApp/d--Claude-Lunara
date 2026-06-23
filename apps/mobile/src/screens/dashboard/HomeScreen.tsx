@@ -370,6 +370,39 @@ export default function HomeScreen() {
         </Animated.View>
       )}
 
+      {/* ─── Period End Card ────────────────────────────────── */}
+      {(phase === 'menstrual' || cycleStore.isInPeriod) && !periodStarted && (
+        <Animated.View entering={FadeInDown.delay(257)} style={styles.section}>
+          <LinearGradient
+            colors={['rgba(139,92,246,0.18)', 'rgba(99,102,241,0.1)']}
+            style={styles.periodStartCard}
+          >
+            <View style={styles.periodStartHeader}>
+              <Text style={styles.periodStartEmoji}>✅</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.periodStartTitle}>¿Terminó tu período hoy?</Text>
+                <Text style={styles.periodStartSub}>Registrá el fin para mejorar las predicciones</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[styles.periodStartBtns, { justifyContent: 'center' }]}
+              onPress={() => {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+                const today = dayjs().format('YYYY-MM-DD')
+                updateLog(today, 'follicular', { phase: 'follicular', flowIntensity: null } as any)
+                cycleStore.setCurrentCycle({ currentPhase: 'follicular', isInPeriod: false })
+                Alert.alert('✅ Registrado', 'Fin del período guardado. Empezás tu fase folicular 🌱')
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.periodStartBtnText, { color: '#a78bfa', fontSize: 15, paddingHorizontal: 24, paddingVertical: 10 }]}>
+                Sí, terminó mi período hoy
+              </Text>
+            </TouchableOpacity>
+          </LinearGradient>
+        </Animated.View>
+      )}
+
       {/* ─── Streak Banner ─────────────────────────────────── */}
       {logStreak >= 3 && (
         <Animated.View entering={FadeInDown.delay(265)} style={styles.section}>
