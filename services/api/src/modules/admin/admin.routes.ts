@@ -159,6 +159,74 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.status(201).send(content)
   })
 
+  // GET /admin/users/:id — user detail
+  app.get('/users/:id', async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: {
+        profile: true,
+        subscription: true,
+        _count: { select: { menstrualCycles: true, symptomLogs: true, aiMessages: true } },
+      },
+    })
+    if (!user) return reply.status(404).send({ error: 'Usuario no encontrado' })
+    return reply.send(user)
+  })
+
+  // PUT /admin/users/:id/subscription — grant or revoke premium
+  app.put('/users/:id/subscription', async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
+    const body = z.object({
+      tier: z.enum(['FREE', 'PREMIUM_MONTHLY', 'PREMIUM_ANNUAL']),
+    }).parse(req.body)
+
+    const updated = await prisma.subscription.upsert({
+      where: { userId: id },
+      create: {
+        userId: id,
+        tier: body.tier as any,
+        status: body.tier === 'FREE' ? 'CANCELLED' : 'ACTIVE',
+        currentPeriodEnd: body.tier === 'FREE' ? null : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+      update: {
+        tier: body.tier as any,
+        status: body.tier === 'FREE' ? 'CANCELLED' : 'ACTIVE',
+        currentPeriodEnd: body.tier === 'FREE' ? null : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    })
+    return reply.send(updated)
+  })
+
+  // GET /admin/community — all posts for moderation
+  app.get('/community', async (req, reply) => {
+    const query = z.object({
+      page: z.coerce.number().default(1),
+      limit: z.coerce.number().default(20),
+    }).parse(req.query)
+
+    const [posts, total] = await Promise.all([
+      prisma.communityPost.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: query.limit,
+        skip: (query.page - 1) * query.limit,
+        include: {
+          author: { select: { email: true, profile: { select: { firstName: true } } } },
+          _count: { select: { reactions: true } },
+        },
+      }),
+      prisma.communityPost.count(),
+    ])
+    return reply.send({ posts, total, page: query.page })
+  })
+
+  // DELETE /admin/community/:postId — delete community post
+  app.delete('/community/:postId', async (req, reply) => {
+    const { postId } = z.object({ postId: z.string().uuid() }).parse(req.params)
+    await prisma.communityPost.delete({ where: { id: postId } })
+    return reply.status(204).send()
+  })
+
   // GET /admin/achievements — achievement management
   app.get('/achievements', async (_req, reply) => {
     const achievements = await prisma.achievement.findMany({

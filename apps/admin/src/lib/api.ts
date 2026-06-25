@@ -36,6 +36,13 @@ export const adminApiFns = {
   updateUserRole: (id: string, role: string) =>
     adminApi.put(`/admin/users/${id}/role`, { role }).then((r) => r.data),
   deleteUser: (id: string) => adminApi.delete(`/admin/users/${id}`).then((r) => r.data),
+  getUser: (id: string) => adminApi.get(`/admin/users/${id}`).then((r) => r.data),
+  updateUserSubscription: (id: string, tier: string) =>
+    adminApi.put(`/admin/users/${id}/subscription`, { tier }).then((r) => r.data),
+  getCommunity: (page = 1) =>
+    adminApi.get('/admin/community', { params: { page } }).then((r) => r.data),
+  deleteCommunityPost: (postId: string) =>
+    adminApi.delete(`/admin/community/${postId}`).then((r) => r.data),
   getContent: () => adminApi.get('/admin/content').then((r) => r.data),
   createContent: (payload: Record<string, unknown>) =>
     adminApi.post('/admin/content', payload).then((r) => r.data),
