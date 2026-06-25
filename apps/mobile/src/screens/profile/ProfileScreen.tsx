@@ -261,7 +261,7 @@ export default function ProfileScreen() {
         },
         {
           id: 'help', icon: '❓', label: 'Centro de ayuda', type: 'nav',
-          onPress: () => Linking.openURL('https://wa.me/5491100000000?text=Hola,%20necesito%20ayuda%20con%20Lunara'),
+          onPress: () => Linking.openURL('mailto:yamilrueda88@gmail.com?subject=Ayuda%20con%20Lunara&body=Hola,%20necesito%20ayuda%20con...'),
         },
         {
           id: 'feedback', icon: '💌', label: 'Enviar comentarios', type: 'nav',

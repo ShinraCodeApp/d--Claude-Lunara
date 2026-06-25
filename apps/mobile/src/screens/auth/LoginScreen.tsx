@@ -278,9 +278,12 @@ export default function LoginScreen() {
 
             {/* Apple Sign-In (iOS only) */}
             {Platform.OS === 'ios' && (
-              <TouchableOpacity style={[styles.socialBtn, styles.appleBtn]}>
+              <TouchableOpacity
+                style={[styles.socialBtn, styles.appleBtn, { opacity: 0.5 }]}
+                disabled
+              >
                 <Text style={styles.socialBtnEmoji}>🍎</Text>
-                <Text style={[styles.socialBtnText, { color: '#fff' }]}>Continuar con Apple</Text>
+                <Text style={[styles.socialBtnText, { color: '#fff' }]}>Apple ID (próximamente)</Text>
               </TouchableOpacity>
             )}
 

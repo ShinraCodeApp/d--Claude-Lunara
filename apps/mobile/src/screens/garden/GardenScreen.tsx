@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Dimensions, RefreshControl,
+  ScrollView, Dimensions, RefreshControl, Alert,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
@@ -146,11 +146,13 @@ export default function GardenScreen() {
     ? Math.min((xp % stageInfo.nextXP) / stageInfo.nextXP, 1)
     : 1
 
-  const handleRewardedVideo = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
-    // TODO: Show Google AdMob rewarded ad, then call API
-    await apiClient.post('/garden/rewarded-video', { adUnitId: 'ca-app-pub-test' })
-    refetch()
+  const handleRewardedVideo = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+    Alert.alert(
+      '🎬 Anuncio no disponible',
+      'Los anuncios de video estarán disponibles próximamente. ¡Seguí cuidando tu jardín para ganar XP!',
+      [{ text: 'Entendido', style: 'default' }],
+    )
   }
 
   return (

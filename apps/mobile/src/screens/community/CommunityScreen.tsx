@@ -95,7 +95,7 @@ export default function CommunityScreen() {
   const [localReactions, setLocalReactions] = useState<Record<string, string[]>>({})
 
   const {
-    data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, refetch, isRefetching,
+    data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, refetch, isRefetching, isError,
   } = useInfiniteQuery({
     queryKey: ['community-posts', category],
     queryFn: ({ pageParam }) => fetchPosts({ pageParam: pageParam as string | undefined, category }),
@@ -248,6 +248,20 @@ export default function CommunityScreen() {
         <View style={styles.centered}>
           <ActivityIndicator color={Colors.lavender[400]} size="large" />
           <Text style={styles.loadingText}>Cargando comunidad...</Text>
+        </View>
+      ) : isError ? (
+        <View style={styles.centered}>
+          <Text style={{ fontSize: 40, marginBottom: 12 }}>😔</Text>
+          <Text style={[styles.loadingText, { color: '#fff', fontSize: 16, fontFamily: 'System', marginBottom: 8 }]}>
+            No se pudo cargar la comunidad
+          </Text>
+          <Text style={styles.loadingText}>Revisá tu conexión e intentá de nuevo</Text>
+          <TouchableOpacity
+            style={{ marginTop: 16, backgroundColor: Colors.primary[600], borderRadius: 12, paddingHorizontal: 24, paddingVertical: 10 }}
+            onPress={() => refetch()}
+          >
+            <Text style={{ color: '#fff', fontWeight: 'bold' }}>Reintentar</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList

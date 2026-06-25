@@ -134,7 +134,7 @@ export default function AiChatScreen() {
         const errorMsg: Message = {
           id: genId(),
           role: 'assistant',
-          content: `Has alcanzado el límite de mensajes de hoy.${!isPremium ? '\n\n💎 Actualiza a Premium para mensajes ilimitados.' : ''}`,
+          content: `Has alcanzado el límite de mensajes de hoy. Podrás escribirle a Luna nuevamente mañana 🌙${!isPremium ? '\n\n💎 Actualizá a Premium para mensajes ilimitados con Luna.' : ''}`,
           timestamp: new Date(),
         }
         setMessages((prev) => [...prev, errorMsg])
