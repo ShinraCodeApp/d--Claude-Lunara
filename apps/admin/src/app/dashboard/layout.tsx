@@ -5,13 +5,14 @@ import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
   LayoutDashboard, Users, MessageSquare,
-  LogOut, Moon, ChevronRight,
+  LogOut, Moon, ChevronRight, Newspaper,
 } from 'lucide-react'
 
 const NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/users', label: 'Usuarias', icon: Users },
   { href: '/dashboard/community', label: 'Comunidad', icon: MessageSquare },
+  { href: '/dashboard/articles', label: 'Artículos', icon: Newspaper },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

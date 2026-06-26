@@ -14,6 +14,7 @@ import { reportsRoutes } from './reports/reports.routes'
 import { pregnancyRoutes } from './pregnancy/pregnancy.routes'
 import { partnerRoutes } from './partner/partner.routes'
 import { communityRoutes } from './community/community.routes'
+import { newsRoutes } from './news/news.routes'
 
 const API_PREFIX = '/api/v1'
 
@@ -39,4 +40,5 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(partnerRoutes, { prefix: `${API_PREFIX}/partner` })
   await app.register(adminRoutes, { prefix: `${API_PREFIX}/admin` })
   await app.register(communityRoutes, { prefix: `${API_PREFIX}/community` })
+  await app.register(newsRoutes, { prefix: `${API_PREFIX}/news` })
 }

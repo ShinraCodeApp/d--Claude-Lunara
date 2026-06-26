@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import {
   Users, TrendingUp, CreditCard, Activity,
-  Moon, MessageSquare, Star, AlertCircle,
+  Moon, MessageSquare, Star, AlertCircle, RefreshCw,
 } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import adminApi from '@/lib/api'
@@ -11,7 +11,7 @@ import adminApi from '@/lib/api'
 const COLORS = ['#8b5cf6', '#a855f7', '#c084fc', '#e879f9', '#f0abfc']
 
 export default function DashboardPage() {
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats, isLoading, refetch: refetchStats, isFetching } = useQuery({
     queryKey: ['admin', 'stats'],
     queryFn: () => adminApi.get('/admin/stats').then((r) => r.data),
     refetchInterval: 60000,
@@ -32,9 +32,19 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-violet-300 text-sm mt-1">Bienvenida al panel de Lunara by ShinraCode</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+          <p className="text-violet-300 text-sm mt-1">Bienvenida al panel de Lunara by ShinraCode</p>
+        </div>
+        <button
+          onClick={() => refetchStats()}
+          disabled={isFetching}
+          className="flex items-center gap-2 text-violet-400 hover:text-white border border-[#3d1a6b] hover:border-violet-500 px-3 py-2 rounded-xl text-sm transition-colors disabled:opacity-50"
+        >
+          <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
+          Actualizar
+        </button>
       </div>
 
       {/* ─── KPI Cards ──────────────────────────────── */}

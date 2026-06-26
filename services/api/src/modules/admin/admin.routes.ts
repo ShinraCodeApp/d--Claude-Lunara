@@ -12,7 +12,7 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get('/stats', async (_req, reply) => {
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const startOfDay = new Date(now.setHours(0, 0, 0, 0))
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
     const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
     const [
@@ -234,5 +234,65 @@ export async function adminRoutes(app: FastifyInstance) {
       orderBy: { xpReward: 'desc' },
     })
     return reply.send(achievements)
+  })
+
+  // ─── Articles ──────────────────────────────────────────────
+
+  // GET /admin/articles
+  app.get('/articles', async (req, reply) => {
+    const { page } = z.object({ page: z.coerce.number().default(1) }).parse(req.query)
+    const skip = (page - 1) * 20
+    const [items, total] = await Promise.all([
+      prisma.article.findMany({
+        orderBy: [{ isPinned: 'desc' }, { publishedAt: 'desc' }],
+        skip,
+        take: 20,
+        include: { author: { select: { profile: { select: { firstName: true } } } } },
+      }),
+      prisma.article.count(),
+    ])
+    return reply.send({ items, total, page })
+  })
+
+  // POST /admin/articles
+  app.post('/articles', async (req, reply) => {
+    const body = z.object({
+      title: z.string().min(1).max(200),
+      excerpt: z.string().min(1).max(500),
+      content: z.string().min(1),
+      imageUrl: z.string().url().optional(),
+      category: z.string().default('salud'),
+      isPinned: z.boolean().default(false),
+      isPublished: z.boolean().default(true),
+    }).parse(req.body)
+
+    const article = await prisma.article.create({
+      data: { ...body, authorId: req.currentUser.id },
+    })
+    return reply.status(201).send(article)
+  })
+
+  // PUT /admin/articles/:id
+  app.put('/articles/:id', async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
+    const body = z.object({
+      title: z.string().min(1).max(200).optional(),
+      excerpt: z.string().min(1).max(500).optional(),
+      content: z.string().min(1).optional(),
+      imageUrl: z.string().url().nullable().optional(),
+      category: z.string().optional(),
+      isPinned: z.boolean().optional(),
+      isPublished: z.boolean().optional(),
+    }).parse(req.body)
+
+    const article = await prisma.article.update({ where: { id }, data: body })
+    return reply.send(article)
+  })
+
+  // DELETE /admin/articles/:id
+  app.delete('/articles/:id', async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
+    await prisma.article.delete({ where: { id } })
+    return reply.status(204).send()
   })
 }

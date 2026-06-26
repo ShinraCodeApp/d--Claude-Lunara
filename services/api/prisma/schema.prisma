@@ -197,6 +197,7 @@ model User {
   // Community
   communityPosts     CommunityPost[]
   communityReactions CommunityReaction[]
+  articles           Article[]
 
   @@map("users")
   @@index([email])
@@ -862,4 +863,29 @@ model CommunityReaction {
   @@map("community_reactions")
   @@index([postId])
   @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// ARTICLES (admin-created content)
+// ─────────────────────────────────────────────────────────────
+
+model Article {
+  id          String   @id @default(uuid())
+  title       String
+  excerpt     String   @db.Text
+  content     String   @db.Text
+  imageUrl    String?
+  category    String   @default("salud")
+  isPinned    Boolean  @default(false)
+  isPublished Boolean  @default(true)
+  publishedAt DateTime @default(now())
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("articles")
+  @@index([category])
+  @@index([publishedAt])
+  @@index([isPinned])
 }
