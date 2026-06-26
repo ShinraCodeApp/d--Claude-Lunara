@@ -28,7 +28,7 @@
       },
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api-staging.lunara.app/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://d-claude-lunara-production.up.railway.app/api/v1"
       }
     },
     "production": {
