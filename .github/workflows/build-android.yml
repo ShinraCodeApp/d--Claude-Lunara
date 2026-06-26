@@ -1,0 +1,79 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+        working-directory: apps/mobile
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > apps/mobile/android/app/lunara-key.keystore
+
+      - name: Write google-services.json
+        run: |
+          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > apps/mobile/android/app/google-services.json
+
+      - name: Make gradlew executable
+        run: chmod +x apps/mobile/android/gradlew
+
+      - name: Build Release APK
+        working-directory: apps/mobile/android
+        env:
+          EXPO_PUBLIC_API_URL: https://d-claude-lunara-production.up.railway.app/api/v1
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+
+      - name: Get app version
+        id: version
+        run: |
+          VERSION=$(node -e "console.log(require('./apps/mobile/app.json').expo.version)")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lunara-v${{ steps.version.outputs.version }}
+          path: apps/mobile/android/app/build/outputs/apk/release/*.apk
+          retention-days: 30
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Lunara v${{ steps.version.outputs.version }}
+          files: apps/mobile/android/app/build/outputs/apk/release/*.apk
+          body: |
+            ## Lunara v${{ steps.version.outputs.version }}
+
+            Descargá e instalá el APK en tu Android.
+
+            > Activá "Instalar desde fuentes desconocidas" en Ajustes si es necesario.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
