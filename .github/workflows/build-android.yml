@@ -29,7 +29,10 @@ jobs:
       - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Install dependencies
+      - name: Install root dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Install mobile dependencies
         run: yarn install --frozen-lockfile
         working-directory: apps/mobile
 
@@ -43,7 +46,20 @@ jobs:
 
       - name: Write gradle.properties
         run: |
-          cat >> apps/mobile/android/gradle.properties << 'EOF'
+          cat > apps/mobile/android/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
+          android.useAndroidX=true
+          android.enableJetifier=true
+          android.enablePngCrunchInReleaseBuilds=true
+          reactNativeArchitectures=arm64-v8a
+          newArchEnabled=false
+          hermesEnabled=true
+          expo.gif.enabled=true
+          expo.webp.enabled=true
+          expo.webp.animated=false
+          EX_DEV_CLIENT_NETWORK_INSPECTOR=true
+          expo.useLegacyPackaging=false
+          REACT_NATIVE_NODE_MODULES_DIR=${{ github.workspace }}/node_modules/react-native
           LUNARA_RELEASE_STORE_FILE=lunara-key.keystore
           LUNARA_RELEASE_KEY_ALIAS=lunara
           LUNARA_RELEASE_STORE_PASSWORD=LunaraShinra2024!
