@@ -29,12 +29,8 @@ jobs:
       - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Install root dependencies
+      - name: Install dependencies
         run: yarn install --frozen-lockfile
-
-      - name: Install mobile dependencies
-        run: yarn install --frozen-lockfile
-        working-directory: apps/mobile
 
       - name: Decode keystore
         run: |
@@ -65,6 +61,9 @@ jobs:
           LUNARA_RELEASE_STORE_PASSWORD=LunaraShinra2024!
           LUNARA_RELEASE_KEY_PASSWORD=LunaraShinra2024!
           EOF
+
+      - name: Generate local.properties
+        run: echo "sdk.dir=$ANDROID_SDK_ROOT" > apps/mobile/android/local.properties
 
       - name: Make gradlew executable
         run: chmod +x apps/mobile/android/gradlew
