@@ -19,6 +19,7 @@ export const REDIS_KEYS = {
   blacklistedToken: (jti: string) => `bl:${jti}`,
   userSession: (userId: string) => `sess:${userId}`,
   cyclePrediction: (userId: string) => `pred:${userId}`,
+  calendarData: (userId: string, year: number, month: number) => `cal:${userId}:${year}:${month}`,
   rateLimitAi: (userId: string) => `ai:rl:${userId}`,
   otpCode: (email: string) => `otp:${email}`,
   passwordReset: (token: string) => `pwr:${token}`,

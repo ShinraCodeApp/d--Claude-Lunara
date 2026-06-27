@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import apiClient from '../client'
 import { useCycleStore } from '@/store'
 
@@ -49,6 +49,7 @@ export function useCalendar(year: number, month: number) {
       return data
     },
     staleTime: 10 * 60 * 1000,
+    placeholderData: keepPreviousData,
   })
 }
 

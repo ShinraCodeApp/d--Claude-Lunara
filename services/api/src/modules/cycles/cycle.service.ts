@@ -85,8 +85,8 @@ export class CycleService {
     // Award XP for cycle tracking
     await gardenService.awardXP(userId, 10, 'cycle_log')
 
-    // Invalidate cache
     await redis.del(REDIS_KEYS.cyclePrediction(userId))
+    await this.invalidateCalendarCache(userId)
 
     return cycle
   }
@@ -138,10 +138,15 @@ export class CycleService {
       },
     })
 
+    await this.invalidateCalendarCache(userId)
     return bleedingDay
   }
 
   async getCalendarData(userId: string, year: number, month: number) {
+    const cacheKey = REDIS_KEYS.calendarData(userId, year, month)
+    const cached = await redis.get(cacheKey)
+    if (cached) return JSON.parse(cached)
+
     const startOfMonth = dayjs(`${year}-${String(month).padStart(2, '0')}-01`).startOf('month')
     const endOfMonth = startOfMonth.endOf('month')
 
@@ -205,7 +210,9 @@ export class CycleService {
       }
     }
 
-    return { days, prediction, cycles }
+    const result = { days, prediction, cycles }
+    await redis.setex(cacheKey, 300, JSON.stringify(result)) // 5 min cache
+    return result
   }
 
   async getStats(userId: string) {
@@ -285,6 +292,12 @@ export class CycleService {
     }
 
     await redis.del(REDIS_KEYS.cyclePrediction(userId))
+    await this.invalidateCalendarCache(userId)
+  }
+
+  private async invalidateCalendarCache(userId: string) {
+    const keys = await redis.keys(`cal:${userId}:*`)
+    if (keys.length > 0) await redis.del(...keys)
   }
 
   private calculateCycleLengths(cycles: { startDate: Date }[]): number[] {
