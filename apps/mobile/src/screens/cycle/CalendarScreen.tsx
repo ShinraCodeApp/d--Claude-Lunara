@@ -158,29 +158,17 @@ export default function CalendarScreen() {
             ))}
           </View>
 
-          {isLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator color={Colors.lavender[400]} size="large" />
-            </View>
-          ) : Object.keys(mergedDays).length === 0 && logs.length === 0 ? (
-            <View style={[styles.loadingContainer, { gap: 8 }]}>
-              <Text style={{ fontSize: 36 }}>🌑</Text>
-              <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, textAlign: 'center', paddingHorizontal: 16 }}>
-                Todavía no hay registros.{'\n'}Empezá a registrar tu ciclo desde la pantalla principal.
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.daysGrid}>
+          <View style={styles.daysGrid}>
               {calendarDays.map((item, i) => {
                 if (!item.date) {
                   return <View key={`empty-${i}`} style={styles.dayCell} />
                 }
 
-                const dayType = mergedDays[item.date]?.type || 'normal'
+                const dayType = isLoading ? 'normal' : (mergedDays[item.date]?.type || 'normal')
                 const dayStyle = DAY_COLORS[dayType] || DAY_COLORS.normal
                 const isSelected = selectedDate === item.date
                 const today = isToday(item.date)
-                const icons = loggedDates[item.date]
+                const icons = isLoading ? undefined : loggedDates[item.date]
 
                 return (
                   <TouchableOpacity
@@ -213,6 +201,8 @@ export default function CalendarScreen() {
                 )
               })}
             </View>
+          {isLoading && (
+            <ActivityIndicator color={Colors.lavender[400]} size="small" style={{ marginTop: 8 }} />
           )}
         </Animated.View>
 
