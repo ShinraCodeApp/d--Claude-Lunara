@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Crown, User, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Crown, User, Trash2, ChevronLeft, ChevronRight, KeyRound, Copy, Check } from 'lucide-react'
 import { adminApiFns } from '@/lib/api'
 import adminApi from '@/lib/api'
 import dayjs from 'dayjs'
@@ -23,6 +23,8 @@ export default function UsersPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [selectedUser, setSelectedUser] = useState<any>(null)
+  const [resetLink, setResetLink] = useState<{ email: string; link: string } | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'users', page, search],
@@ -48,6 +50,21 @@ export default function UsersPage() {
     mutationFn: (id: string) => adminApiFns.deleteUser(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
   })
+
+  const resetMutation = useMutation({
+    mutationFn: (id: string) => adminApi.post(`/admin/users/${id}/reset-password`).then((r) => r.data),
+    onSuccess: (data, id) => {
+      const user = (data as any)
+      setResetLink({ email: data.email, link: data.resetLink })
+    },
+  })
+
+  const copyLink = () => {
+    if (!resetLink) return
+    navigator.clipboard.writeText(resetLink.link)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const total = data?.total ?? 0
   const totalPages = Math.ceil(total / 20)
@@ -128,6 +145,13 @@ export default function UsersPage() {
                         Gestionar
                       </button>
                       <button
+                        onClick={() => resetMutation.mutate(user.id)}
+                        title="Resetear contraseña"
+                        className="text-xs bg-amber-950 hover:bg-amber-900 text-amber-300 px-2 py-1.5 rounded-lg transition-colors"
+                      >
+                        <KeyRound size={13} />
+                      </button>
+                      <button
                         onClick={() => {
                           if (confirm(`¿Eliminar la cuenta de ${user.email}?`)) deleteMutation.mutate(user.id)
                         }}
@@ -165,6 +189,23 @@ export default function UsersPage() {
             >
               <ChevronRight size={16} />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {resetLink && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setResetLink(null)}>
+          <div className="bg-surface border border-amber-900/50 rounded-2xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-amber-300 mb-1">Link de reset generado</h3>
+            <p className="text-sm text-violet-300 mb-4">Enviáselo a <strong>{resetLink.email}</strong> — expira en 1 hora.</p>
+            <div className="bg-black/40 rounded-lg p-3 text-xs text-violet-200 break-all mb-4 font-mono">{resetLink.link}</div>
+            <div className="flex gap-3">
+              <button onClick={copyLink} className="flex-1 flex items-center justify-center gap-2 bg-amber-700 hover:bg-amber-600 text-white py-2.5 rounded-xl text-sm font-semibold transition-colors">
+                {copied ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar link</>}
+              </button>
+              <button onClick={() => setResetLink(null)} className="px-4 py-2.5 rounded-xl border border-violet-700 text-violet-300 text-sm hover:bg-violet-900/30 transition-colors">Cerrar</button>
+            </div>
           </div>
         </div>
       )}

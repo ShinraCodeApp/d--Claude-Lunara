@@ -52,6 +52,7 @@ const envSchema = z.object({
 
   // CORS
   FRONTEND_URL: z.string().default('http://localhost:3001'),
+  ADMIN_URL: z.string().default('http://localhost:3001'),
   ALLOWED_ORIGINS: z.string().default('http://localhost:3001'),
 
   // Rate Limiting

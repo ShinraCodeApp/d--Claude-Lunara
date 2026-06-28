@@ -198,6 +198,22 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.send(updated)
   })
 
+  // POST /admin/users/:id/reset-password — generate reset link for user
+  app.post('/users/:id/reset-password', async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
+    const user = await prisma.user.findUnique({ where: { id } })
+    if (!user) return reply.status(404).send({ error: 'Usuario no encontrado' })
+
+    const { generateSecureToken } = await import('@/utils/crypto')
+    const { redis, REDIS_KEYS } = await import('@/config/redis')
+    const token = generateSecureToken(32)
+    await redis.setex(REDIS_KEYS.passwordReset(token), 3600, user.id)
+
+    const adminUrl = process.env.ADMIN_URL || 'http://localhost:3001'
+    const resetLink = `${adminUrl}/reset-password?token=${token}`
+    return reply.send({ resetLink, email: user.email, expiresIn: '1 hora' })
+  })
+
   // GET /admin/community — all posts for moderation
   app.get('/community', async (req, reply) => {
     const query = z.object({
