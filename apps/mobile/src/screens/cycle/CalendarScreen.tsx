@@ -22,7 +22,7 @@ dayjs.extend(isBetween)
 dayjs.locale('es')
 
 const { width } = Dimensions.get('window')
-const DAY_SIZE = (width - Spacing.md * 4 - (Spacing.sm / 2) * 6) / 7
+const DAY_SIZE = (width - Spacing.md * 4 - (Spacing.sm / 2) * 6 - 2) / 7
 
 const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
 
@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   dayNum: {
-    fontSize: Typography.fontSize.sm,
+    fontSize: Typography.fontSize.xs,
     fontFamily: Typography.fontFamily.medium,
     color: Colors.dark.text,
   },
