@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Dimensions, ActivityIndicator, RefreshControl,
+  ScrollView, ActivityIndicator, RefreshControl,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -20,9 +20,6 @@ import { Colors, Typography, Spacing, BorderRadius, Shadows } from '@/theme'
 dayjs.extend(weekday)
 dayjs.extend(isBetween)
 dayjs.locale('es')
-
-const { width } = Dimensions.get('window')
-const DAY_SIZE = (width - Spacing.md * 4 - (Spacing.sm / 2) * 6 - 2) / 7
 
 const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
 
@@ -89,13 +86,18 @@ export default function CalendarScreen() {
   const daysInMonth = currentMonth.daysInMonth()
   const firstDayOfWeek = (startOfMonth.day() + 6) % 7 // Monday = 0
 
-  const calendarDays: Array<{ date: string | null; dayNum: number | null }> = [
+  const calendarCells: Array<{ date: string | null; dayNum: number | null }> = [
     ...Array(firstDayOfWeek).fill({ date: null, dayNum: null }),
     ...Array.from({ length: daysInMonth }, (_, i) => {
       const date = currentMonth.date(i + 1).format('YYYY-MM-DD')
       return { date, dayNum: i + 1 }
     }),
   ]
+  // Pad to complete last week
+  while (calendarCells.length % 7 !== 0) calendarCells.push({ date: null, dayNum: null })
+  const calendarWeeks = Array.from({ length: calendarCells.length / 7 }, (_, i) =>
+    calendarCells.slice(i * 7, i * 7 + 7)
+  )
 
   const handleDayPress = (date: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
@@ -158,18 +160,17 @@ export default function CalendarScreen() {
             ))}
           </View>
 
-          <View style={styles.daysGrid}>
-              {calendarDays.map((item, i) => {
+          {calendarWeeks.map((week, wi) => (
+            <View key={wi} style={styles.weekRow}>
+              {week.map((item, di) => {
                 if (!item.date) {
-                  return <View key={`empty-${i}`} style={styles.dayCell} />
+                  return <View key={`e-${wi}-${di}`} style={styles.dayCell} />
                 }
-
                 const dayType = isLoading ? 'normal' : (mergedDays[item.date]?.type || 'normal')
                 const dayStyle = DAY_COLORS[dayType] || DAY_COLORS.normal
                 const isSelected = selectedDate === item.date
                 const today = isToday(item.date)
                 const icons = isLoading ? undefined : loggedDates[item.date]
-
                 return (
                   <TouchableOpacity
                     key={item.date}
@@ -201,6 +202,7 @@ export default function CalendarScreen() {
                 )
               })}
             </View>
+          ))}
           {isLoading && (
             <ActivityIndicator color={Colors.lavender[400]} size="small" style={{ marginTop: 8 }} />
           )}
@@ -371,17 +373,17 @@ const styles = StyleSheet.create({
   },
   weekdaysRow: { flexDirection: 'row', marginBottom: Spacing.sm },
   weekday: {
-    width: DAY_SIZE,
+    flex: 1,
     textAlign: 'center',
     fontSize: Typography.fontSize.xs,
     fontFamily: Typography.fontFamily.bold,
     color: Colors.dark.muted,
   },
   loadingContainer: { height: 200, alignItems: 'center', justifyContent: 'center' },
-  daysGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm / 2 },
+  weekRow: { flexDirection: 'row', marginBottom: 2 },
   dayCell: {
-    width: DAY_SIZE,
-    height: DAY_SIZE + 10,
+    flex: 1,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: BorderRadius.sm,
