@@ -53,8 +53,7 @@ export default function UsersPage() {
 
   const resetMutation = useMutation({
     mutationFn: (id: string) => adminApi.post(`/admin/users/${id}/reset-password`).then((r) => r.data),
-    onSuccess: (data, id) => {
-      const user = (data as any)
+    onSuccess: (data) => {
       setResetLink({ email: data.email, link: data.resetLink })
     },
   })
