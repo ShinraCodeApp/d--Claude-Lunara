@@ -8,6 +8,7 @@ export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [remember, setRemember] = useState(true)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -22,7 +23,12 @@ export default function LoginPage() {
         setLoading(false)
         return
       }
-      localStorage.setItem('admin_token', data.accessToken)
+      if (remember) {
+        localStorage.setItem('admin_token', data.accessToken)
+        if (data.refreshToken) localStorage.setItem('admin_refresh_token', data.refreshToken)
+      } else {
+        sessionStorage.setItem('admin_token', data.accessToken)
+      }
       router.push('/dashboard')
     } catch (err: any) {
       setError(err?.response?.data?.message ?? 'Credenciales incorrectas')
@@ -34,7 +40,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-bg flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="text-6xl mb-3">🌙</div>
           <h1 className="text-3xl font-bold text-white">Lunara</h1>
@@ -50,7 +55,7 @@ export default function LoginPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@shinracode.com"
+              placeholder="admin@lunara.app"
               className="w-full bg-card border border-[#3d1a6b] rounded-xl px-4 py-3 text-white placeholder-violet-600 focus:outline-none focus:border-violet-500"
               required
             />
@@ -67,6 +72,16 @@ export default function LoginPage() {
               required
             />
           </div>
+
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <div
+              onClick={() => setRemember(!remember)}
+              className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${remember ? 'bg-violet-600 border-violet-500' : 'bg-card border-[#3d1a6b]'}`}
+            >
+              {remember && <span className="text-white text-xs font-bold">✓</span>}
+            </div>
+            <span className="text-violet-300 text-sm">Recordarme en este dispositivo</span>
+          </label>
 
           {error && (
             <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm">

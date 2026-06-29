@@ -21,7 +21,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    const token = localStorage.getItem('admin_token')
+    const token = localStorage.getItem('admin_token') || sessionStorage.getItem('admin_token')
     if (!token) {
       router.replace('/login')
     } else {
@@ -31,6 +31,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const handleLogout = () => {
     localStorage.removeItem('admin_token')
+    localStorage.removeItem('admin_refresh_token')
+    sessionStorage.removeItem('admin_token')
     window.location.href = '/login'
   }
 

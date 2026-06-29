@@ -5,20 +5,69 @@ const adminApi = axios.create({
   withCredentials: true,
 })
 
+const getToken = () =>
+  typeof window !== 'undefined'
+    ? localStorage.getItem('admin_token') || sessionStorage.getItem('admin_token')
+    : null
+
+const getRefreshToken = () =>
+  typeof window !== 'undefined' ? localStorage.getItem('admin_refresh_token') : null
+
+const clearSession = () => {
+  localStorage.removeItem('admin_token')
+  localStorage.removeItem('admin_refresh_token')
+  sessionStorage.removeItem('admin_token')
+}
+
 adminApi.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('admin_token')
-    if (token) config.headers.Authorization = `Bearer ${token}`
-  }
+  const token = getToken()
+  if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
 
+let isRefreshing = false
+let refreshQueue: Array<(token: string) => void> = []
+
 adminApi.interceptors.response.use(
   (res) => res,
-  (err) => {
-    if (err.response?.status === 401 && typeof window !== 'undefined') {
-      localStorage.removeItem('admin_token')
-      window.location.href = '/login'
+  async (err) => {
+    const original = err.config
+    if (err.response?.status === 401 && !original._retry && typeof window !== 'undefined') {
+      const refreshToken = getRefreshToken()
+      if (refreshToken) {
+        if (isRefreshing) {
+          return new Promise((resolve) => {
+            refreshQueue.push((token) => {
+              original.headers.Authorization = `Bearer ${token}`
+              resolve(adminApi(original))
+            })
+          })
+        }
+        original._retry = true
+        isRefreshing = true
+        try {
+          const { data } = await axios.post(
+            `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000/api/v1'}/auth/refresh`,
+            { refreshToken },
+            { withCredentials: true }
+          )
+          const newToken = data.accessToken
+          localStorage.setItem('admin_token', newToken)
+          if (data.refreshToken) localStorage.setItem('admin_refresh_token', data.refreshToken)
+          refreshQueue.forEach((cb) => cb(newToken))
+          refreshQueue = []
+          original.headers.Authorization = `Bearer ${newToken}`
+          return adminApi(original)
+        } catch {
+          clearSession()
+          window.location.href = '/login'
+        } finally {
+          isRefreshing = false
+        }
+      } else {
+        clearSession()
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(err)
   }
