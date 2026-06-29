@@ -74,6 +74,12 @@ jobs:
           EXPO_PUBLIC_API_URL: https://d-claude-lunara-production.up.railway.app/api/v1
         run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
 
+      - name: Build Release AAB (Play Store)
+        working-directory: apps/mobile/android
+        env:
+          EXPO_PUBLIC_API_URL: https://d-claude-lunara-production.up.railway.app/api/v1
+        run: ./gradlew bundleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+
       - name: Get app version
         id: version
         run: |
@@ -83,8 +89,15 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lunara-v${{ steps.version.outputs.version }}
+          name: lunara-v${{ steps.version.outputs.version }}-apk
           path: apps/mobile/android/app/build/outputs/apk/release/*.apk
+          retention-days: 30
+
+      - name: Upload AAB artifact (Play Store)
+        uses: actions/upload-artifact@v4
+        with:
+          name: lunara-v${{ steps.version.outputs.version }}-aab
+          path: apps/mobile/android/app/build/outputs/bundle/release/*.aab
           retention-days: 30
 
       - name: Create GitHub Release
@@ -92,13 +105,14 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: Lunara v${{ steps.version.outputs.version }}
-          files: apps/mobile/android/app/build/outputs/apk/release/*.apk
+          files: |
+            apps/mobile/android/app/build/outputs/apk/release/*.apk
+            apps/mobile/android/app/build/outputs/bundle/release/*.aab
           body: |
             ## Lunara v${{ steps.version.outputs.version }}
 
-            Descargá e instalá el APK en tu Android.
-
-            > Activá "Instalar desde fuentes desconocidas" en Ajustes si es necesario.
+            **APK** — Instalación directa en Android (activá "fuentes desconocidas").
+            **AAB** — Para subir a Google Play Store.
           draft: false
           prerelease: false
         env:
