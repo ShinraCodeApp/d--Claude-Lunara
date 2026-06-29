@@ -198,6 +198,33 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.send(updated)
   })
 
+  // PUT /admin/users/:id/profile — edit user profile
+  app.put('/users/:id/profile', async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
+    const body = z.object({
+      firstName: z.string().max(50).optional(),
+      lastName: z.string().max(50).optional(),
+      email: z.string().email().optional(),
+      bio: z.string().max(300).optional(),
+      dateOfBirth: z.string().optional().nullable(),
+      averageCycleLength: z.coerce.number().min(15).max(60).optional(),
+      averagePeriodLength: z.coerce.number().min(1).max(15).optional(),
+    }).parse(req.body)
+
+    const { email, ...profileFields } = body
+
+    const [profile] = await Promise.all([
+      prisma.userProfile.upsert({
+        where: { userId: id },
+        create: { userId: id, ...profileFields, dateOfBirth: profileFields.dateOfBirth ? new Date(profileFields.dateOfBirth) : undefined },
+        update: { ...profileFields, dateOfBirth: profileFields.dateOfBirth ? new Date(profileFields.dateOfBirth) : profileFields.dateOfBirth === null ? null : undefined },
+      }),
+      ...(email ? [prisma.user.update({ where: { id }, data: { email } })] : []),
+    ])
+
+    return reply.send(profile)
+  })
+
   // POST /admin/users/:id/reset-password — generate reset link for user
   app.post('/users/:id/reset-password', async (req, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params)

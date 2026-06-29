@@ -23,6 +23,7 @@ export default function UsersPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [selectedUser, setSelectedUser] = useState<any>(null)
+  const [editForm, setEditForm] = useState<any>(null)
   const [resetLink, setResetLink] = useState<{ email: string; link: string } | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -49,6 +50,16 @@ export default function UsersPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => adminApiFns.deleteUser(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
+  })
+
+  const profileMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: any }) =>
+      adminApi.put(`/admin/users/${id}/profile`, body).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'users'] })
+      setSelectedUser(null)
+      setEditForm(null)
+    },
   })
 
   const resetMutation = useMutation({
@@ -211,55 +222,115 @@ export default function UsersPage() {
 
       {/* User Modal */}
       {selectedUser && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setSelectedUser(null)}>
-          <div className="bg-surface border border-[#3d1a6b] rounded-2xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => { setSelectedUser(null); setEditForm(null) }}>
+          <div className="bg-surface border border-[#3d1a6b] rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-full bg-violet-900 flex items-center justify-center text-xl font-bold text-violet-200">
                 {selectedUser.profile?.firstName?.[0] ?? selectedUser.email[0].toUpperCase()}
               </div>
               <div>
-                <div className="text-white font-semibold">
-                  {selectedUser.profile?.firstName ?? 'Sin nombre'}
-                </div>
+                <div className="text-white font-semibold">{selectedUser.profile?.firstName ?? 'Sin nombre'} {selectedUser.profile?.lastName ?? ''}</div>
                 <div className="text-violet-400 text-sm">{selectedUser.email}</div>
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-5">
+              {/* Editar perfil */}
               <div>
-                <p className="text-violet-400 text-sm mb-2">Cambiar plan</p>
+                <p className="text-violet-400 text-xs font-semibold uppercase tracking-wider mb-3">Editar perfil</p>
+                <div className="space-y-2">
+                  {editForm === null ? (
+                    <button
+                      onClick={() => setEditForm({
+                        firstName: selectedUser.profile?.firstName ?? '',
+                        lastName: selectedUser.profile?.lastName ?? '',
+                        email: selectedUser.email ?? '',
+                        bio: selectedUser.profile?.bio ?? '',
+                        dateOfBirth: selectedUser.profile?.dateOfBirth ? selectedUser.profile.dateOfBirth.slice(0, 10) : '',
+                        averageCycleLength: selectedUser.profile?.averageCycleLength ?? 28,
+                        averagePeriodLength: selectedUser.profile?.averagePeriodLength ?? 5,
+                      })}
+                      className="w-full py-2 rounded-xl border border-[#3d1a6b] text-violet-300 text-sm hover:border-violet-500 transition-colors"
+                    >
+                      ✏️ Editar datos del perfil
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs text-violet-400 mb-1 block">Nombre</label>
+                          <input value={editForm.firstName} onChange={(e) => setEditForm((f: any) => ({ ...f, firstName: e.target.value }))}
+                            className="w-full bg-card border border-[#3d1a6b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500" />
+                        </div>
+                        <div>
+                          <label className="text-xs text-violet-400 mb-1 block">Apellido</label>
+                          <input value={editForm.lastName} onChange={(e) => setEditForm((f: any) => ({ ...f, lastName: e.target.value }))}
+                            className="w-full bg-card border border-[#3d1a6b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-violet-400 mb-1 block">Email</label>
+                        <input value={editForm.email} onChange={(e) => setEditForm((f: any) => ({ ...f, email: e.target.value }))}
+                          className="w-full bg-card border border-[#3d1a6b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-violet-400 mb-1 block">Bio</label>
+                        <textarea value={editForm.bio} onChange={(e) => setEditForm((f: any) => ({ ...f, bio: e.target.value }))}
+                          rows={2} className="w-full bg-card border border-[#3d1a6b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 resize-none" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-violet-400 mb-1 block">Fecha de nacimiento</label>
+                        <input type="date" value={editForm.dateOfBirth} onChange={(e) => setEditForm((f: any) => ({ ...f, dateOfBirth: e.target.value }))}
+                          className="w-full bg-card border border-[#3d1a6b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs text-violet-400 mb-1 block">Largo ciclo (días)</label>
+                          <input type="number" min={15} max={60} value={editForm.averageCycleLength} onChange={(e) => setEditForm((f: any) => ({ ...f, averageCycleLength: +e.target.value }))}
+                            className="w-full bg-card border border-[#3d1a6b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500" />
+                        </div>
+                        <div>
+                          <label className="text-xs text-violet-400 mb-1 block">Largo período (días)</label>
+                          <input type="number" min={1} max={15} value={editForm.averagePeriodLength} onChange={(e) => setEditForm((f: any) => ({ ...f, averagePeriodLength: +e.target.value }))}
+                            className="w-full bg-card border border-[#3d1a6b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500" />
+                        </div>
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => profileMutation.mutate({ id: selectedUser.id, body: editForm })}
+                          disabled={profileMutation.isPending}
+                          className="flex-1 py-2 bg-violet-600 hover:bg-violet-500 rounded-xl text-white text-sm font-semibold transition-colors disabled:opacity-50"
+                        >
+                          {profileMutation.isPending ? 'Guardando...' : '💾 Guardar cambios'}
+                        </button>
+                        <button onClick={() => setEditForm(null)} className="px-4 py-2 rounded-xl border border-[#3d1a6b] text-violet-400 text-sm hover:bg-card transition-colors">Cancelar</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Plan */}
+              <div>
+                <p className="text-violet-400 text-xs font-semibold uppercase tracking-wider mb-3">Plan</p>
                 <div className="grid grid-cols-3 gap-2">
                   {['FREE', 'PREMIUM_MONTHLY', 'PREMIUM_ANNUAL'].map((tier) => (
-                    <button
-                      key={tier}
-                      onClick={() => subMutation.mutate({ id: selectedUser.id, tier })}
-                      disabled={subMutation.isPending}
-                      className={`py-2 px-2 rounded-xl text-xs font-medium border transition-colors ${
-                        selectedUser.subscription?.tier === tier
-                          ? 'bg-violet-600 border-violet-500 text-white'
-                          : 'bg-card border-[#3d1a6b] text-violet-300 hover:border-violet-500'
-                      }`}
-                    >
+                    <button key={tier} onClick={() => subMutation.mutate({ id: selectedUser.id, tier })} disabled={subMutation.isPending}
+                      className={`py-2 px-2 rounded-xl text-xs font-medium border transition-colors ${selectedUser.subscription?.tier === tier ? 'bg-violet-600 border-violet-500 text-white' : 'bg-card border-[#3d1a6b] text-violet-300 hover:border-violet-500'}`}>
                       {tier === 'FREE' ? 'Free' : tier === 'PREMIUM_MONTHLY' ? 'Mensual' : 'Anual'}
                     </button>
                   ))}
                 </div>
               </div>
 
+              {/* Rol */}
               <div>
-                <p className="text-violet-400 text-sm mb-2">Cambiar rol</p>
+                <p className="text-violet-400 text-xs font-semibold uppercase tracking-wider mb-3">Rol</p>
                 <div className="grid grid-cols-2 gap-2">
                   {['USER', 'ADMIN'].map((role) => (
-                    <button
-                      key={role}
-                      onClick={() => roleMutation.mutate({ id: selectedUser.id, role })}
-                      disabled={roleMutation.isPending}
-                      className={`py-2 rounded-xl text-sm font-medium border transition-colors ${
-                        selectedUser.role === role
-                          ? 'bg-violet-600 border-violet-500 text-white'
-                          : 'bg-card border-[#3d1a6b] text-violet-300 hover:border-violet-500'
-                      }`}
-                    >
+                    <button key={role} onClick={() => roleMutation.mutate({ id: selectedUser.id, role })} disabled={roleMutation.isPending}
+                      className={`py-2 rounded-xl text-sm font-medium border transition-colors ${selectedUser.role === role ? 'bg-violet-600 border-violet-500 text-white' : 'bg-card border-[#3d1a6b] text-violet-300 hover:border-violet-500'}`}>
                       {role === 'USER' ? <><User size={13} className="inline mr-1" />Usuario</> : <><Crown size={13} className="inline mr-1" />Admin</>}
                     </button>
                   ))}
@@ -267,10 +338,8 @@ export default function UsersPage() {
               </div>
             </div>
 
-            <button
-              onClick={() => setSelectedUser(null)}
-              className="mt-6 w-full py-2 bg-card border border-[#3d1a6b] rounded-xl text-violet-400 text-sm hover:bg-[#3d1a6b] transition-colors"
-            >
+            <button onClick={() => { setSelectedUser(null); setEditForm(null) }}
+              className="mt-6 w-full py-2 bg-card border border-[#3d1a6b] rounded-xl text-violet-400 text-sm hover:bg-[#3d1a6b] transition-colors">
               Cerrar
             </button>
           </div>
