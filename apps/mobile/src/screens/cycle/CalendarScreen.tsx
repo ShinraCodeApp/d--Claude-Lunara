@@ -170,7 +170,7 @@ export default function CalendarScreen() {
                 const dayStyle = DAY_COLORS[dayType] || DAY_COLORS.normal
                 const isSelected = selectedDate === item.date
                 const today = isToday(item.date)
-                const icons = isLoading ? undefined : loggedDates[item.date]
+                const icons = loggedDates[item.date]
                 return (
                   <TouchableOpacity
                     key={item.date}
