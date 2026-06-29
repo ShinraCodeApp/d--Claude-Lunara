@@ -138,6 +138,7 @@ enum ContraceptiveType {
 model User {
   id              String   @id @default(uuid())
   email           String   @unique
+  username        String?  @unique
   emailVerified   Boolean  @default(false)
   passwordHash    String?
   role            UserRole @default(USER)

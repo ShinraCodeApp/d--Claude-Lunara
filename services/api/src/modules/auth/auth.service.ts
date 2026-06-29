@@ -18,21 +18,30 @@ const gardenService = new GardenService()
 type RegisterInput = {
   email: string
   password: string
+  username?: string
   firstName?: string
   lastName?: string
   acceptTerms: true
 }
 
 type LoginInput = {
-  email: string
+  email: string    // accepts email or username
   password: string
 }
 
 export class AuthService {
   async register(data: RegisterInput) {
-    const existing = await prisma.user.findUnique({ where: { email: data.email.toLowerCase() } })
+    const existing = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: data.email.toLowerCase() },
+          ...(data.username ? [{ username: data.username.toLowerCase() }] : []),
+        ],
+      },
+    })
     if (existing) {
-      throw { statusCode: 409, message: 'El correo ya está registrado' }
+      if (existing.email === data.email.toLowerCase()) throw { statusCode: 409, message: 'El correo ya está registrado' }
+      throw { statusCode: 409, message: 'El nombre de usuario ya está en uso' }
     }
 
     const passwordHash = await hashPassword(data.password)
@@ -41,6 +50,7 @@ export class AuthService {
       const newUser = await tx.user.create({
         data: {
           email: data.email.toLowerCase(),
+          username: data.username?.toLowerCase() || undefined,
           passwordHash,
           profile: {
             create: {
@@ -72,8 +82,13 @@ export class AuthService {
   }
 
   async login(data: LoginInput, req: FastifyRequest) {
-    const user = await prisma.user.findUnique({
-      where: { email: data.email.toLowerCase(), deletedAt: null },
+    const identifier = data.email.toLowerCase().trim()
+    const isEmail = identifier.includes('@')
+    const user = await prisma.user.findFirst({
+      where: {
+        deletedAt: null,
+        ...(isEmail ? { email: identifier } : { username: identifier }),
+      },
       include: { subscription: true, profile: true },
     })
 

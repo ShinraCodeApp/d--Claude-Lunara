@@ -24,6 +24,7 @@ export default function LoginScreen() {
 
   const [isLogin, setIsLogin] = useState(true)
   const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [firstName, setFirstName] = useState('')
   const [showPass, setShowPass] = useState(false)
@@ -81,7 +82,7 @@ export default function LoginScreen() {
         return { ...data, fromBackend: true }
       } else {
         const { data } = await apiClient.post('/auth/register', {
-          email, password, firstName, acceptTerms: true,
+          email, password, firstName, username: username.trim() || undefined, acceptTerms: true,
         })
         return { ...data, fromBackend: true }
       }
@@ -162,30 +163,45 @@ export default function LoginScreen() {
           {/* Form */}
           <Animated.View entering={FadeInDown.delay(200)} style={styles.form}>
             {!isLogin && (
-              <View style={styles.inputWrapper}>
-                <Text style={styles.inputLabel}>Nombre (opcional)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={firstName}
-                  onChangeText={setFirstName}
-                  placeholder="¿Cómo te llamamos?"
-                  placeholderTextColor={Colors.dark.muted}
-                  autoComplete="given-name"
-                />
-              </View>
+              <>
+                <View style={styles.inputWrapper}>
+                  <Text style={styles.inputLabel}>Nombre (opcional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={firstName}
+                    onChangeText={setFirstName}
+                    placeholder="¿Cómo te llamamos?"
+                    placeholderTextColor={Colors.dark.muted}
+                    autoComplete="given-name"
+                  />
+                </View>
+                <View style={styles.inputWrapper}>
+                  <Text style={styles.inputLabel}>Nombre de usuario (opcional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={username}
+                    onChangeText={(t) => setUsername(t.toLowerCase().replace(/[^a-z0-9_.]/g, ''))}
+                    placeholder="mi_usuario"
+                    placeholderTextColor={Colors.dark.muted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <Text style={styles.inputHint}>Solo letras, números, _ y . — podés usarlo para iniciar sesión</Text>
+                </View>
+              </>
             )}
 
             <View style={styles.inputWrapper}>
-              <Text style={styles.inputLabel}>Correo electrónico</Text>
+              <Text style={styles.inputLabel}>{isLogin ? 'Email o nombre de usuario' : 'Correo electrónico'}</Text>
               <TextInput
                 style={styles.input}
                 value={email}
                 onChangeText={(t) => { setEmail(t); setError('') }}
-                placeholder="tu@correo.com"
+                placeholder={isLogin ? 'tu@correo.com o tu_usuario' : 'tu@correo.com'}
                 placeholderTextColor={Colors.dark.muted}
-                keyboardType="email-address"
+                keyboardType={isLogin && !email.includes('@') ? 'default' : 'email-address'}
                 autoCapitalize="none"
-                autoComplete="email"
+                autoComplete={isLogin ? 'username' : 'email'}
               />
             </View>
 
@@ -329,6 +345,7 @@ const styles = StyleSheet.create({
   form: { gap: Spacing.md },
   inputWrapper: { gap: 6 },
   inputLabel: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.6)' },
+  inputHint: { fontSize: 11, color: 'rgba(167,139,250,0.5)', marginTop: 2 },
   input: {
     backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: BorderRadius.lg,
     paddingHorizontal: Spacing.md, paddingVertical: 14,

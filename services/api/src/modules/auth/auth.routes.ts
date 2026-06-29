@@ -27,6 +27,7 @@ export async function authRoutes(app: FastifyInstance) {
     const body = z.object({
       email: z.string().email(),
       password: z.string().min(8).max(128),
+      username: z.string().min(3).max(30).regex(/^[a-z0-9_.]+$/, 'Solo letras minúsculas, números, _ y .').optional(),
       firstName: z.string().max(50).optional(),
       lastName: z.string().max(50).optional(),
       acceptTerms: z.literal(true, { errorMap: () => ({ message: 'Debes aceptar los términos de servicio' }) }),
