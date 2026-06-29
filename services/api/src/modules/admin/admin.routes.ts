@@ -238,6 +238,10 @@ export async function adminRoutes(app: FastifyInstance) {
 
     const adminUrl = process.env.ADMIN_URL || 'http://localhost:3001'
     const resetLink = `${adminUrl}/reset-password?token=${token}`
+
+    const { sendPasswordResetEmail } = await import('@/utils/email')
+    await sendPasswordResetEmail(user.email, resetLink).catch(() => null) // non-blocking
+
     return reply.send({ resetLink, email: user.email, expiresIn: '1 hora' })
   })
 

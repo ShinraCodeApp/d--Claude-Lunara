@@ -73,6 +73,11 @@ export class AuthService {
 
     const tokens = await this.generateTokenPair(user.id)
 
+    // Fire-and-forget welcome email
+    import('@/utils/email').then(({ sendWelcomeEmail }) =>
+      sendWelcomeEmail(user.email, data.firstName).catch(() => null)
+    )
+
     return {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
@@ -249,8 +254,10 @@ export class AuthService {
     const token = generateSecureToken(32)
     await redis.setex(REDIS_KEYS.passwordReset(token), 3600, user.id) // 1 hour
 
-    // TODO: Send email via AWS SES
-    console.log(`Password reset token for ${email}: ${token}`)
+    const { sendPasswordResetEmail } = await import('@/utils/email')
+    const adminUrl = process.env.ADMIN_URL || 'http://localhost:3001'
+    const resetLink = `${adminUrl}/reset-password?token=${token}`
+    await sendPasswordResetEmail(user.email, resetLink)
   }
 
   async resetPassword(token: string, newPassword: string) {

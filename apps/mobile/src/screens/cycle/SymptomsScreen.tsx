@@ -7,9 +7,13 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated'
 import * as Haptics from 'expo-haptics'
+import * as StoreReview from 'expo-store-review'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { router, useLocalSearchParams } from 'expo-router'
+import { MMKV } from 'react-native-mmkv'
+
+const reviewStorage = new MMKV({ id: 'lunara-review' })
 
 import apiClient from '@/api/client'
 import { useSettingsStore, useSymptomStore, useCycleStore, useGardenStore } from '@/store'
@@ -220,7 +224,7 @@ export default function SymptomsScreen() {
 
       Promise.allSettled(promises) // fire and forget
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       if (isNewLog && isToday) {
         const gainedXp = 15
         const newXp = xp + gainedXp
@@ -230,6 +234,16 @@ export default function SymptomsScreen() {
       setSaved(true)
       queryClient.invalidateQueries({ queryKey: ['cycles', 'current'] })
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+
+      // Prompt for store review after 5th log
+      try {
+        const count = (reviewStorage.getNumber('log_count') || 0) + 1
+        reviewStorage.set('log_count', count)
+        if (count === 5 && await StoreReview.hasAction()) {
+          await StoreReview.requestReview()
+        }
+      } catch { /* non-critical */ }
+
       setTimeout(() => router.back(), 1500)
     },
   })

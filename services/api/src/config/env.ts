@@ -47,6 +47,9 @@ const envSchema = z.object({
   // Security
   ENCRYPTION_KEY: z.string().min(32).optional(),
 
+  // Email
+  RESEND_API_KEY: z.string().optional(),
+
   // Monitoring
   SENTRY_DSN: z.string().optional(),
 
