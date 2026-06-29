@@ -89,7 +89,7 @@ export default function ArticlesPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const payload = { ...form, imageUrl: form.imageUrl || undefined }
+    const payload = { ...form, imageUrl: form.imageUrl || '' }
     if (editingId) {
       updateMutation.mutate({ id: editingId, body: payload })
     } else {
