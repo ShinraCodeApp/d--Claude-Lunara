@@ -241,6 +241,45 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.send({ resetLink, email: user.email, expiresIn: '1 hora' })
   })
 
+  // POST /admin/notifications/broadcast — send push to all users
+  app.post('/notifications/broadcast', async (req, reply) => {
+    const body = z.object({
+      title: z.string().min(1).max(100),
+      message: z.string().min(1).max(300),
+      type: z.string().default('announcement'),
+    }).parse(req.body)
+
+    const devices = await prisma.userDevice.findMany({
+      where: { isActive: true, fcmToken: { not: null } },
+      select: { userId: true, fcmToken: true },
+    })
+
+    const { default: firebaseAdmin } = await import('@/config/firebase')
+    const messaging = firebaseAdmin.messaging()
+
+    const chunks = []
+    for (let i = 0; i < devices.length; i += 500) chunks.push(devices.slice(i, i + 500))
+
+    let sent = 0
+    let failed = 0
+    for (const chunk of chunks) {
+      const tokens = chunk.map((d) => d.fcmToken!).filter(Boolean)
+      if (!tokens.length) continue
+      try {
+        const result = await messaging.sendEachForMulticast({
+          tokens,
+          notification: { title: body.title, body: body.message },
+          data: { type: body.type },
+          android: { priority: 'high', notification: { channelId: 'lunara_notifications', color: '#8b5cf6' } },
+        })
+        sent += result.successCount
+        failed += result.failureCount
+      } catch { failed += chunk.length }
+    }
+
+    return reply.send({ sent, failed, total: devices.length })
+  })
+
   // GET /admin/community — all posts for moderation
   app.get('/community', async (req, reply) => {
     const query = z.object({

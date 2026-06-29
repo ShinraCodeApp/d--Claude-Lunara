@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
   LayoutDashboard, Users, MessageSquare,
-  LogOut, Moon, ChevronRight, Newspaper,
+  LogOut, Moon, ChevronRight, Newspaper, Trophy, Bell,
 } from 'lucide-react'
 
 const NAV = [
@@ -13,6 +13,8 @@ const NAV = [
   { href: '/dashboard/users', label: 'Usuarias', icon: Users },
   { href: '/dashboard/community', label: 'Comunidad', icon: MessageSquare },
   { href: '/dashboard/articles', label: 'Artículos', icon: Newspaper },
+  { href: '/dashboard/achievements', label: 'Logros', icon: Trophy },
+  { href: '/dashboard/notifications', label: 'Notificaciones', icon: Bell },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
