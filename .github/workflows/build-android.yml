@@ -93,11 +93,14 @@ jobs:
           path: apps/mobile/android/app/build/outputs/apk/release/*.apk
           retention-days: 30
 
+      - name: Rename AAB
+        run: mv apps/mobile/android/app/build/outputs/bundle/release/app-release.aab apps/mobile/android/app/build/outputs/bundle/release/Lunara-v${{ steps.version.outputs.version }}-release.aab
+
       - name: Upload AAB artifact (Play Store)
         uses: actions/upload-artifact@v4
         with:
           name: lunara-v${{ steps.version.outputs.version }}-aab
-          path: apps/mobile/android/app/build/outputs/bundle/release/*.aab
+          path: apps/mobile/android/app/build/outputs/bundle/release/Lunara-v${{ steps.version.outputs.version }}-release.aab
           retention-days: 30
 
       - name: Create GitHub Release
