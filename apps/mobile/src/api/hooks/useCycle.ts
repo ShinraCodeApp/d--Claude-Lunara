@@ -43,13 +43,21 @@ export function useCalendar(year: number, month: number) {
   return useQuery({
     queryKey: CYCLE_KEYS.calendar(year, month),
     queryFn: async () => {
-      const { data } = await apiClient.get('/cycles/calendar', {
-        params: { year, month },
-      })
-      return data
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 8000)
+      try {
+        const { data } = await apiClient.get('/cycles/calendar', {
+          params: { year, month },
+          signal: controller.signal,
+        })
+        return data
+      } finally {
+        clearTimeout(timer)
+      }
     },
     staleTime: 10 * 60 * 1000,
     placeholderData: keepPreviousData,
+    retry: 1,
   })
 }
 

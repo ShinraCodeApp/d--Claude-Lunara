@@ -184,37 +184,7 @@ export default function SymptomsScreen() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const promises: Promise<any>[] = []
-
-      if (selectedMood) {
-        promises.push(apiClient.post('/symptoms/mood', {
-          date: targetDate,
-          mood: selectedMood,
-          intensity: moodIntensity,
-          notes,
-        }))
-      }
-
-      for (const [symptomId, intensity] of Object.entries(selectedSymptoms)) {
-        promises.push(apiClient.post('/symptoms/log', {
-          date: targetDate,
-          symptomId,
-          intensity,
-        }))
-      }
-
-      promises.push(apiClient.post('/symptoms/daily-log', {
-        date: targetDate,
-        energyLevel,
-        sleepHours: parseFloat(sleepHours),
-        sleepQuality,
-        notes,
-      }))
-
-      await Promise.allSettled(promises)
-    },
-    onSuccess: () => {
-      // Save locally (works offline too)
+      // Save locally first — instant, works offline
       const energyMap: Record<number, 'alta' | 'media' | 'baja'> = { 5: 'alta', 4: 'alta', 3: 'media', 2: 'baja', 1: 'baja' }
       const sleepQualityMap: Record<number, 'bueno' | 'regular' | 'malo'> = { 5: 'bueno', 4: 'bueno', 3: 'regular', 2: 'malo', 1: 'malo' }
       updateLog(targetDate, isPeriod ? 'menstrual' : currentPhase ?? null, {
@@ -234,7 +204,23 @@ export default function SymptomsScreen() {
         migraine: hasMigraine || null,
         flowIntensity: isPeriod ? periodIntensity : null,
       })
-      // XP + cristales solo en registros nuevos del día de hoy
+
+      // Sync with API in background (don't block save on network)
+      const timeout = (ms: number) => new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
+      const withTimeout = (p: Promise<any>) => Promise.race([p, timeout(8000)]).catch(() => null)
+
+      const promises: Promise<any>[] = []
+      if (selectedMood) {
+        promises.push(withTimeout(apiClient.post('/symptoms/mood', { date: targetDate, mood: selectedMood, intensity: moodIntensity, notes })))
+      }
+      for (const [symptomId, intensity] of Object.entries(selectedSymptoms)) {
+        promises.push(withTimeout(apiClient.post('/symptoms/log', { date: targetDate, symptomId, intensity })))
+      }
+      promises.push(withTimeout(apiClient.post('/symptoms/daily-log', { date: targetDate, energyLevel, sleepHours: parseFloat(sleepHours), sleepQuality, notes })))
+
+      Promise.allSettled(promises) // fire and forget
+    },
+    onSuccess: () => {
       if (isNewLog && isToday) {
         const gainedXp = 15
         const newXp = xp + gainedXp
