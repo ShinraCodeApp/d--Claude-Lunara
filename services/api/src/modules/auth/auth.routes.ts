@@ -1,10 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import bcrypt from 'bcryptjs'
 import { authenticate } from '@/middleware/auth.middleware'
 import { AuthService } from './auth.service'
-import { prisma } from '@/config/database'
-import { env } from '@/config/env'
 
 const authService = new AuthService()
 
@@ -93,31 +90,6 @@ export async function authRoutes(app: FastifyInstance) {
     })
 
     return reply.send({ accessToken: result.accessToken })
-  })
-
-  // POST /auth/setup-admin  — one-time recovery endpoint, requires SETUP_SECRET env var
-  app.post('/setup-admin', async (req, reply) => {
-    const { secret } = z.object({ secret: z.string() }).parse(req.body)
-    if (!env.SETUP_SECRET || secret !== env.SETUP_SECRET) {
-      return reply.status(403).send({ message: 'Forbidden' })
-    }
-    const passwordHash = await bcrypt.hash('ShinraAdmin2026!', 12)
-    const user = await prisma.user.upsert({
-      where: { email: 'yamilrueda88@gmail.com' },
-      create: {
-        email: 'yamilrueda88@gmail.com',
-        passwordHash,
-        role: 'ADMIN',
-        emailVerified: true,
-        profile: { create: { firstName: 'Yamil', lastName: 'ShinraCode' } },
-        subscription: { create: { tier: 'PREMIUM_ANNUAL', status: 'ACTIVE' } },
-        notifSettings: { create: {} },
-        streaks: { create: {} },
-      },
-      update: { role: 'ADMIN', passwordHash, emailVerified: true },
-      select: { id: true, email: true, role: true },
-    })
-    return reply.send({ ok: true, user })
   })
 
   // POST /auth/logout

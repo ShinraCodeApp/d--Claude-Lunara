@@ -182,10 +182,10 @@ async function main() {
   })
 
   // ─── Admin user ───────────────────────────────────────────
-  const adminPassword = await bcrypt.hash('LunaraAdmin2024!', 12)
+  const adminPassword = await bcrypt.hash(process.env.ADMIN_SEED_PASSWORD ?? 'LunaraAdmin2026#Shinra!', 12)
   await prisma.user.upsert({
     where: { email: 'admin@lunara.app' },
-    update: {},
+    update: { passwordHash: adminPassword },
     create: {
       email: 'admin@lunara.app',
       emailVerified: true,
