@@ -98,4 +98,6 @@ export const adminApiFns = {
   getAchievements: () => adminApi.get('/admin/achievements').then((r) => r.data),
   login: (email: string, password: string) =>
     adminApi.post('/auth/login', { email, password }).then((r) => r.data),
+  logout: () =>
+    adminApi.post('/auth/logout').catch(() => null), // fire & forget — always clear locally
 }

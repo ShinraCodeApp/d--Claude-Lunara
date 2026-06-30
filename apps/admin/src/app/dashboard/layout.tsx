@@ -7,6 +7,7 @@ import {
   LayoutDashboard, Users, MessageSquare,
   LogOut, Moon, ChevronRight, Newspaper, Trophy, Bell,
 } from 'lucide-react'
+import { adminApiFns } from '@/lib/api'
 
 const NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -31,11 +32,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [router])
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await adminApiFns.logout() // clears httpOnly refreshToken cookie on server
     localStorage.removeItem('admin_token')
     localStorage.removeItem('admin_refresh_token')
     sessionStorage.removeItem('admin_token')
-    window.location.href = '/login'
+    window.location.replace('/login') // replace prevents back-button returning to dashboard
   }
 
   if (!ready) {
