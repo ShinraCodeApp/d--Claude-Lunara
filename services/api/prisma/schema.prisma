@@ -838,6 +838,8 @@ model CommunityPost {
   phase       String?
   category    String   @default("general") // general, tip, question, support
   isAnonymous Boolean  @default(true)
+  isOfficial  Boolean  @default(false)
+  articleId   String?
   likesCount  Int      @default(0)
   hugsCount   Int      @default(0)
   isPinned    Boolean  @default(false)

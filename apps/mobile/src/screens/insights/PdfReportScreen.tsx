@@ -134,27 +134,32 @@ ${topSymptoms.length > 0 ? `
 </html>`
   }
 
-  const generatePdf = async () => {
+  const generatePdf = async (forDoctor = false) => {
     if (totalLogs === 0) {
-      Alert.alert('Sin datos', 'Necesitas al menos un registro para generar el reporte.')
+      Alert.alert('Sin datos', 'Necesitás al menos un registro para generar el reporte.')
       return
     }
     setGenerating(true)
     try {
-      const html = buildHtml()
+      let html = buildHtml()
+      if (forDoctor) {
+        html = html
+          .replace('🌙 Reporte de Ciclo —', '🩺 Reporte Médico — Ciclo Menstrual de')
+          .replace('Generado el', 'Para consulta médica · Generado el')
+      }
       const { uri } = await Print.printToFileAsync({ html, base64: false })
       const canShare = await Sharing.isAvailableAsync()
       if (canShare) {
         await Sharing.shareAsync(uri, {
           mimeType: 'application/pdf',
-          dialogTitle: 'Compartir reporte de ciclo',
+          dialogTitle: forDoctor ? 'Compartir con tu médica/o' : 'Compartir reporte de ciclo',
           UTI: 'com.adobe.pdf',
         })
       } else {
         Alert.alert('PDF generado', `Guardado en: ${uri}`)
       }
-    } catch (e) {
-      Alert.alert('Error', 'No se pudo generar el PDF. Inténtalo de nuevo.')
+    } catch {
+      Alert.alert('Error', 'No se pudo generar el PDF. Intentalo de nuevo.')
     } finally {
       setGenerating(false)
     }
@@ -216,9 +221,20 @@ ${topSymptoms.length > 0 ? `
           </LinearGradient>
         </Animated.View>
 
-        {/* Generate button */}
-        <Animated.View entering={FadeInDown.delay(300)}>
-          <TouchableOpacity onPress={generatePdf} disabled={generating} activeOpacity={0.9}>
+        {/* Generate buttons */}
+        <Animated.View entering={FadeInDown.delay(300)} style={{ gap: 12 }}>
+          <TouchableOpacity onPress={() => generatePdf(true)} disabled={generating} activeOpacity={0.9}>
+            <LinearGradient
+              colors={generating ? ['#6b7280', '#6b7280'] : ['#0f766e', '#0d9488']}
+              style={styles.generateBtn}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            >
+              {generating
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={styles.generateBtnText}>🩺 Compartir con mi médica/o</Text>}
+            </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => generatePdf(false)} disabled={generating} activeOpacity={0.9}>
             <LinearGradient
               colors={generating ? ['#6b7280', '#6b7280'] : [Colors.primary[600], Colors.lavender[500]]}
               style={styles.generateBtn}

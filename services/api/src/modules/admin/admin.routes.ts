@@ -284,6 +284,30 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.send({ sent, failed, total: devices.length })
   })
 
+  // POST /admin/articles/:id/announce — post article as official community announcement
+  app.post('/articles/:id/announce', async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
+    const article = await prisma.article.findUnique({ where: { id } })
+    if (!article) return reply.status(404).send({ error: 'Artículo no encontrado' })
+
+    const existing = await prisma.communityPost.findFirst({ where: { articleId: id } })
+    if (existing) return reply.status(409).send({ error: 'Este artículo ya fue anunciado en comunidad' })
+
+    const post = await prisma.communityPost.create({
+      data: {
+        userId: req.currentUser.id,
+        content: `📣 **${article.title}**\n\n${article.excerpt}`,
+        category: 'general',
+        isAnonymous: false,
+        isOfficial: true,
+        isPinned: true,
+        articleId: id,
+      },
+    })
+
+    return reply.status(201).send(post)
+  })
+
   // GET /admin/community — all posts for moderation
   app.get('/community', async (req, reply) => {
     const query = z.object({

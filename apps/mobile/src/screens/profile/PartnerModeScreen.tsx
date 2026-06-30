@@ -1,12 +1,14 @@
 import React, { useState } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, TextInput, ScrollView } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, ScrollView, Share, Alert } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeInDown } from 'react-native-reanimated'
 import { router } from 'expo-router'
+import { useMutation } from '@tanstack/react-query'
 
 import { useSettingsStore, useCycleStore } from '@/store'
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
+import apiClient from '@/api/client'
 
 const PHASE_INFO: Record<string, { emoji: string; title: string; partnerTip: string; color: string }> = {
   menstrual: {
@@ -38,6 +40,23 @@ export default function PartnerModeScreen() {
   const daysUntilPeriod = nextPeriodDate
     ? Math.max(0, Math.ceil((new Date(nextPeriodDate).getTime() - Date.now()) / 86400000))
     : null
+
+  const notifyMutation = useMutation({
+    mutationFn: () => apiClient.post('/partner/notify-phase', {
+      phase: currentPhase,
+      daysUntilPeriod: daysUntilPeriod ?? undefined,
+    }),
+    onSuccess: (res) => {
+      if (res.data.sent) Alert.alert('💜 Enviado', 'Tu pareja recibió una notificación sobre tu fase actual.')
+      else Alert.alert('Sin pareja vinculada', 'Vinculá una cuenta de pareja para enviar notificaciones. Usá el código de invitación.')
+    },
+  })
+
+  const handleShareNative = () => {
+    if (!phaseInfo) return
+    const msg = `💑 Estoy en mi ${phaseInfo.title.toLowerCase()} (día ${dayOfCycle ?? '?'} del ciclo).\n\n${phaseInfo.partnerTip}\n\n— via Lunara app 🌙`
+    Share.share({ message: msg, title: 'Mi ciclo — Lunara' })
+  }
 
   const handleSave = () => {
     setPartnerName(nameInput.trim())
@@ -127,6 +146,24 @@ export default function PartnerModeScreen() {
           </Animated.View>
         )}
 
+        {/* Notify partner buttons */}
+        {partnerMode && phaseInfo && (
+          <Animated.View entering={FadeInDown.delay(220)} style={styles.notifyRow}>
+            <TouchableOpacity
+              style={styles.notifyBtn}
+              onPress={() => notifyMutation.mutate()}
+              disabled={notifyMutation.isPending}
+            >
+              <Text style={styles.notifyBtnText}>
+                {notifyMutation.isPending ? '...' : '🔔 Notificar en la app'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.notifyBtn, styles.notifyBtnShare]} onPress={handleShareNative}>
+              <Text style={styles.notifyBtnText}>📤 Compartir por WhatsApp</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+
         {/* What's hidden */}
         <Animated.View entering={FadeInDown.delay(240)} style={styles.privacyCard}>
           <Text style={styles.privacyTitle}>🔒 Privacidad garantizada</Text>
@@ -146,6 +183,13 @@ export default function PartnerModeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: Spacing.md, paddingBottom: 60, gap: Spacing.md },
+  notifyRow: { flexDirection: 'row', gap: Spacing.sm },
+  notifyBtn: {
+    flex: 1, backgroundColor: 'rgba(109,40,217,0.3)', borderWidth: 1, borderColor: '#7c3aed',
+    borderRadius: BorderRadius.lg, paddingVertical: 12, alignItems: 'center',
+  },
+  notifyBtnShare: { backgroundColor: 'rgba(16,185,129,0.15)', borderColor: '#10b981' },
+  notifyBtnText: { color: '#fff', fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.medium },
   header: { gap: 4, paddingTop: Spacing.sm },
   backBtn: { marginBottom: 4 },
   backBtnText: { color: Colors.lavender[300], fontSize: Typography.fontSize.sm },

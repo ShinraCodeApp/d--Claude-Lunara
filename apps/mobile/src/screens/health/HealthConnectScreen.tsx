@@ -15,8 +15,10 @@ import {
   getGrantedPermissions,
   openHealthConnectSettings,
   readRecords,
+  insertRecords,
   SdkAvailabilityStatus,
 } from 'react-native-health-connect'
+import { useCycleStore } from '@/store'
 
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
 
@@ -85,6 +87,8 @@ const HC_PERMISSIONS = [
   { accessType: 'read' as const, recordType: 'HeartRate' as const },
   { accessType: 'read' as const, recordType: 'ActiveCaloriesBurned' as const },
   { accessType: 'read' as const, recordType: 'Weight' as const },
+  { accessType: 'write' as const, recordType: 'MenstruationFlow' as const },
+  { accessType: 'write' as const, recordType: 'MenstruationPeriod' as const },
 ]
 
 async function syncHealthConnect(): Promise<{

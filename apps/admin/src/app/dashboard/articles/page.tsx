@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, Edit, Pin, Eye, EyeOff, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, Edit, Pin, Eye, EyeOff, ChevronLeft, ChevronRight, Megaphone } from 'lucide-react'
 import adminApi from '@/lib/api'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
@@ -61,6 +61,12 @@ export default function ArticlesPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => adminApi.delete(`/admin/articles/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'articles'] }),
+  })
+
+  const announceMutation = useMutation({
+    mutationFn: (id: string) => adminApi.post(`/admin/articles/${id}/announce`),
+    onSuccess: () => alert('✅ Artículo anunciado en la comunidad como publicación oficial'),
+    onError: (e: any) => alert(e?.response?.data?.error ?? 'Error al anunciar'),
   })
 
   const togglePin = (article: Article) =>
@@ -293,6 +299,13 @@ export default function ArticlesPage() {
                         className="p-1.5 rounded-lg text-violet-600 hover:text-violet-400 hover:bg-violet-950 transition-colors"
                       >
                         <Edit size={14} />
+                      </button>
+                      <button
+                        onClick={() => { if (confirm(`¿Publicar "${a.title}" como anuncio oficial en la Comunidad?`)) announceMutation.mutate(a.id) }}
+                        title="Anunciar en Comunidad"
+                        className="p-1.5 rounded-lg text-amber-600 hover:text-amber-400 hover:bg-amber-950 transition-colors"
+                      >
+                        <Megaphone size={14} />
                       </button>
                       <button
                         onClick={() => { if (confirm('¿Eliminar este artículo?')) deleteMutation.mutate(a.id) }}

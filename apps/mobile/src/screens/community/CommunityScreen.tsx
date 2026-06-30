@@ -209,11 +209,12 @@ export default function CommunityScreen() {
 
     return (
       <Animated.View entering={FadeInDown.delay(index * 40)}>
-        <View style={[styles.postCard, item.isPinned && styles.pinnedCard]}>
-          {item.isPinned && <Text style={styles.pinnedBadge}>📌 Destacado</Text>}
+        <View style={[styles.postCard, item.isPinned && styles.pinnedCard, (item as any).isOfficial && styles.officialCard]}>
+          {(item as any).isOfficial && <Text style={styles.officialBadge}>💜 Lunara Oficial</Text>}
+          {item.isPinned && !(item as any).isOfficial && <Text style={styles.pinnedBadge}>📌 Destacado</Text>}
           <View style={styles.postHeader}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>{item.isAnonymous ? '🌙' : (item.authorName?.[0] ?? '?')}</Text>
+            <View style={[(item as any).isOfficial ? styles.officialAvatar : styles.avatarCircle]}>
+              <Text style={styles.avatarText}>{(item as any).isOfficial ? '🌙' : item.isAnonymous ? '🌙' : (item.authorName?.[0] ?? '?')}</Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.authorName}>{item.authorName}</Text>
@@ -595,6 +596,13 @@ const styles = StyleSheet.create({
   },
   pinnedCard: { borderColor: 'rgba(168,85,247,0.4)', backgroundColor: 'rgba(139,92,246,0.08)' },
   pinnedBadge: { fontSize: Typography.fontSize.xs, color: Colors.lavender[400] },
+  officialCard: { borderColor: 'rgba(139,92,246,0.6)', backgroundColor: 'rgba(109,40,217,0.12)' },
+  officialBadge: { fontSize: Typography.fontSize.xs, color: '#a78bfa', fontFamily: Typography.fontFamily.bold, marginBottom: 4 },
+  officialAvatar: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(109,40,217,0.5)', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: '#7c3aed',
+  },
   postHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   avatarCircle: {
     width: 36, height: 36, borderRadius: 18,

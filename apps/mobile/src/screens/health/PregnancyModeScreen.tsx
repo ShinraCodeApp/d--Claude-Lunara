@@ -9,6 +9,25 @@ import dayjs from 'dayjs'
 import { useSettingsStore } from '@/store'
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
 
+const DOCTOR_VISITS: { week: number; title: string; desc: string }[] = [
+  { week: 8,  title: 'Primera consulta obstétrica', desc: 'Confirmación de embarazo, grupo sanguíneo, ecografía inicial' },
+  { week: 12, title: 'Ecografía 1er trimestre', desc: 'Translucencia nucal, screening combinado' },
+  { week: 16, title: 'Control prenatal', desc: 'Análisis de sangre, tensión arterial, peso' },
+  { week: 20, title: 'Ecografía morfológica', desc: 'Revisión completa de órganos del bebé' },
+  { week: 24, title: 'Test de glucosa (PTOG)', desc: 'Detección de diabetes gestacional' },
+  { week: 28, title: 'Inicio 3er trimestre', desc: 'Control Rh, hemograma, ecografía de crecimiento' },
+  { week: 32, title: 'Ecografía de bienestar', desc: 'Posición del bebé, placenta, líquido amniótico' },
+  { week: 36, title: 'Cultivo estreptococo B', desc: 'Preparación para el parto, plan de nacimiento' },
+  { week: 38, title: 'Control semanal', desc: 'Monitoreo hasta el parto' },
+  { week: 40, title: '¡Término!', desc: 'Evaluación de inducción si no inició el trabajo de parto' },
+]
+
+const TRIMESTER_CHECKLIST: Record<number, string[]> = {
+  1: ['Tomar ácido fólico diariamente', 'Evitar alcohol, tabaco y medicamentos sin consultar', 'Confirmar con tu médica el plan de seguimiento', 'Avisar en el trabajo (cuando estés lista)', 'Buscar un obstétra/partera de confianza'],
+  2: ['Reservar clases de preparto', 'Ecografía morfológica (semana 20)', 'Test de glucosa (semana 24-28)', 'Empezar a preparar la bolsa del hospital', 'Hablar del plan de parto con tu médica'],
+  3: ['Terminar la bolsa del hospital', 'Tour por la maternidad', 'Instalar la sillita del auto', 'Conocer los signos de trabajo de parto', 'Descansar y cuidar tu salud emocional'],
+}
+
 const TRIMESTERS = [
   { n: 1, label: 'Primer Trimestre', weeks: '1–12', emoji: '🌱', color: '#34d399' },
   { n: 2, label: 'Segundo Trimestre', weeks: '13–26', emoji: '🌸', color: Colors.lavender[400] },
@@ -172,6 +191,35 @@ export default function PregnancyModeScreen() {
               </View>
             </Animated.View>
 
+            {/* Doctor visit schedule */}
+            <Animated.View entering={FadeInDown.delay(200)}>
+              <Text style={styles.sectionLabel}>PRÓXIMAS VISITAS MÉDICAS</Text>
+              {DOCTOR_VISITS.filter((v) => v.week >= (pregnancy?.weeks ?? 0)).slice(0, 3).map((v) => (
+                <View key={v.week} style={styles.visitCard}>
+                  <View style={[styles.visitWeekBadge, { backgroundColor: trimesterInfo.color + '30' }]}>
+                    <Text style={[styles.visitWeek, { color: trimesterInfo.color }]}>S{v.week}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.visitTitle}>{v.title}</Text>
+                    <Text style={styles.visitDesc}>{v.desc}</Text>
+                  </View>
+                </View>
+              ))}
+            </Animated.View>
+
+            {/* Trimester checklist */}
+            <Animated.View entering={FadeInDown.delay(220)}>
+              <Text style={styles.sectionLabel}>CHECKLIST DEL TRIMESTRE</Text>
+              <View style={styles.checklistCard}>
+                {(TRIMESTER_CHECKLIST[pregnancy.trimester] ?? []).map((item) => (
+                  <View key={item} style={styles.checkRow}>
+                    <Text style={[styles.checkDot, { color: trimesterInfo.color }]}>✓</Text>
+                    <Text style={styles.checkText}>{item}</Text>
+                  </View>
+                ))}
+              </View>
+            </Animated.View>
+
             {/* Trimester guide */}
             <Animated.View entering={FadeInDown.delay(240)}>
               <Text style={styles.sectionLabel}>GUÍA DE TRIMESTRES</Text>
@@ -221,6 +269,21 @@ const styles = StyleSheet.create({
   backText: { color: Colors.lavender[300], fontSize: Typography.fontSize.sm },
   title: { fontSize: Typography.fontSize['2xl'], fontFamily: Typography.fontFamily.bold, color: '#fff' },
   subtitle: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.5)' },
+  visitCard: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm,
+    backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: BorderRadius.lg,
+    padding: Spacing.sm, marginBottom: 6,
+  },
+  visitWeekBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, minWidth: 36, alignItems: 'center' },
+  visitWeek: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold },
+  visitTitle: { color: '#fff', fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.medium },
+  visitDesc: { color: 'rgba(255,255,255,0.45)', fontSize: 11, marginTop: 1 },
+  checklistCard: {
+    backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: BorderRadius.lg, padding: Spacing.sm, gap: 6,
+  },
+  checkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  checkDot: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold, marginTop: 1 },
+  checkText: { flex: 1, color: 'rgba(255,255,255,0.7)', fontSize: Typography.fontSize.sm, lineHeight: 18 },
   setupCard: {
     backgroundColor: 'rgba(139,92,246,0.15)', borderRadius: BorderRadius.xl,
     padding: Spacing.md, gap: Spacing.sm, borderWidth: 1, borderColor: 'rgba(139,92,246,0.3)',
