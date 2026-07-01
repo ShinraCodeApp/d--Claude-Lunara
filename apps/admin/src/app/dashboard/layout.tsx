@@ -6,12 +6,15 @@ import Link from 'next/link'
 import {
   LayoutDashboard, Users, MessageSquare,
   LogOut, Moon, ChevronRight, Newspaper, Trophy, Bell,
+  TrendingDown, CreditCard,
 } from 'lucide-react'
 import { adminApiFns } from '@/lib/api'
 
 const NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/users', label: 'Usuarias', icon: Users },
+  { href: '/dashboard/subscriptions', label: 'Suscripciones', icon: CreditCard },
+  { href: '/dashboard/retention', label: 'Retención', icon: TrendingDown },
   { href: '/dashboard/community', label: 'Comunidad', icon: MessageSquare },
   { href: '/dashboard/articles', label: 'Artículos', icon: Newspaper },
   { href: '/dashboard/achievements', label: 'Logros', icon: Trophy },

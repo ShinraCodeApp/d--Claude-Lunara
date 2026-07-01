@@ -4,9 +4,11 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Users, TrendingUp, CreditCard, Activity,
   Moon, MessageSquare, Star, AlertCircle, RefreshCw,
+  TrendingDown, Clock,
 } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import adminApi from '@/lib/api'
+import Link from 'next/link'
 
 const COLORS = ['#8b5cf6', '#a855f7', '#c084fc', '#e879f9', '#f0abfc']
 
@@ -20,6 +22,12 @@ export default function DashboardPage() {
   const { data: growth } = useQuery({
     queryKey: ['admin', 'growth'],
     queryFn: () => adminApi.get('/admin/growth').then((r) => r.data),
+  })
+
+  const { data: retention } = useQuery({
+    queryKey: ['admin', 'retention'],
+    queryFn: () => adminApi.get('/admin/retention').then((r) => r.data),
+    refetchInterval: 120000,
   })
 
   if (isLoading) {
@@ -150,6 +158,26 @@ export default function DashboardPage() {
         <FeatureCard icon={<Moon size={18} />} title="Ciclos registrados hoy" value={stats?.cyclesLoggedToday ?? 0} />
         <FeatureCard icon={<MessageSquare size={18} />} title="Mensajes IA hoy" value={stats?.aiMessagesToday ?? 0} />
         <FeatureCard icon={<Star size={18} />} title="Logros desbloqueados" value={stats?.achievementsToday ?? 0} />
+      </div>
+
+      {/* ─── Retention Quick Stats ──────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Link href="/dashboard/retention" className="group bg-[#1a0533] border border-[#3d1a6b] hover:border-violet-500 rounded-2xl p-5 flex items-center gap-4 transition-colors">
+          <div className="text-yellow-400 bg-yellow-950 p-3 rounded-xl"><Clock size={18} /></div>
+          <div className="flex-1">
+            <div className="text-2xl font-bold text-white">{retention?.inactiveCount?.toLocaleString() ?? '—'}</div>
+            <div className="text-violet-400 text-sm">Usuarias inactivas +7 días</div>
+          </div>
+          <TrendingDown size={16} className="text-violet-600 group-hover:text-violet-400 transition-colors" />
+        </Link>
+        <Link href="/dashboard/subscriptions" className="group bg-[#1a0533] border border-[#3d1a6b] hover:border-violet-500 rounded-2xl p-5 flex items-center gap-4 transition-colors">
+          <div className="text-red-400 bg-red-950 p-3 rounded-xl"><TrendingDown size={18} /></div>
+          <div className="flex-1">
+            <div className="text-2xl font-bold text-white">{retention?.churnRate ?? '—'}%</div>
+            <div className="text-violet-400 text-sm">Churn rate este mes</div>
+          </div>
+          <CreditCard size={16} className="text-violet-600 group-hover:text-violet-400 transition-colors" />
+        </Link>
       </div>
 
       {/* ─── Alerts ─────────────────────────────────── */}

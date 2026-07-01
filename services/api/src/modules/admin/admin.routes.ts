@@ -308,24 +308,31 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.status(201).send(post)
   })
 
-  // GET /admin/community — all posts for moderation
+  // GET /admin/community — all posts for moderation (with filter/search)
   app.get('/community', async (req, reply) => {
     const query = z.object({
       page: z.coerce.number().default(1),
       limit: z.coerce.number().default(20),
+      category: z.string().optional(),
+      search: z.string().optional(),
     }).parse(req.query)
+
+    const where: any = {}
+    if (query.category) where.category = query.category
+    if (query.search) where.content = { contains: query.search, mode: 'insensitive' }
 
     const [posts, total] = await Promise.all([
       prisma.communityPost.findMany({
-        orderBy: { createdAt: 'desc' },
+        where,
+        orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
         take: query.limit,
         skip: (query.page - 1) * query.limit,
         include: {
-          author: { select: { email: true, profile: { select: { firstName: true } } } },
+          author: { select: { id: true, email: true, profile: { select: { firstName: true } } } },
           _count: { select: { reactions: true } },
         },
       }),
-      prisma.communityPost.count(),
+      prisma.communityPost.count({ where }),
     ])
     return reply.send({ posts, total, page: query.page })
   })
@@ -335,6 +342,169 @@ export async function adminRoutes(app: FastifyInstance) {
     const { postId } = z.object({ postId: z.string().uuid() }).parse(req.params)
     await prisma.communityPost.delete({ where: { id: postId } })
     return reply.status(204).send()
+  })
+
+  // PATCH /admin/community/:postId/pin — toggle pin
+  app.patch('/community/:postId/pin', async (req, reply) => {
+    const { postId } = z.object({ postId: z.string().uuid() }).parse(req.params)
+    const post = await prisma.communityPost.findUnique({ where: { id: postId } })
+    if (!post) return reply.status(404).send({ error: 'Post no encontrado' })
+    const updated = await prisma.communityPost.update({
+      where: { id: postId },
+      data: { isPinned: !post.isPinned },
+    })
+    return reply.send(updated)
+  })
+
+  // DELETE /admin/community/user/:userId — delete all posts from a user
+  app.delete('/community/user/:userId', async (req, reply) => {
+    const { userId } = z.object({ userId: z.string().uuid() }).parse(req.params)
+    const { count } = await prisma.communityPost.deleteMany({ where: { userId } })
+    return reply.send({ deleted: count })
+  })
+
+  // GET /admin/retention — cohort, churn, inactive users
+  app.get('/retention', async (_req, reply) => {
+    const now = new Date()
+    const day7ago = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+
+    const [inactiveCount, churnedThisMonth, totalUsers, inactiveUsers] = await Promise.all([
+      prisma.user.count({
+        where: {
+          deletedAt: null,
+          createdAt: { lt: day7ago },
+          OR: [{ lastLoginAt: { lt: day7ago } }, { lastLoginAt: null }],
+        },
+      }),
+      prisma.subscription.count({ where: { cancelledAt: { gte: startOfMonth } } }),
+      prisma.user.count({ where: { deletedAt: null } }),
+      prisma.user.findMany({
+        where: {
+          deletedAt: null,
+          createdAt: { lt: day7ago },
+          OR: [{ lastLoginAt: { lt: day7ago } }, { lastLoginAt: null }],
+        },
+        select: { id: true, email: true, lastLoginAt: true, createdAt: true, profile: { select: { firstName: true } } },
+        orderBy: { lastLoginAt: 'asc' },
+        take: 10,
+      }),
+    ])
+
+    const cohorts = await Promise.all(
+      Array.from({ length: 4 }, async (_, i) => {
+        const weekStart = dayjs().subtract(i + 1, 'week').startOf('week').toDate()
+        const weekEnd = dayjs().subtract(i, 'week').startOf('week').toDate()
+        const [registered, stillActive] = await Promise.all([
+          prisma.user.count({ where: { createdAt: { gte: weekStart, lt: weekEnd }, deletedAt: null } }),
+          prisma.user.count({
+            where: { createdAt: { gte: weekStart, lt: weekEnd }, deletedAt: null, lastLoginAt: { gte: day7ago } },
+          }),
+        ])
+        return {
+          week: dayjs(weekStart).format('DD/MM'),
+          registered,
+          active: stillActive,
+          retention: registered > 0 ? Math.round((stillActive / registered) * 100) : 0,
+        }
+      })
+    )
+
+    return reply.send({
+      inactiveCount,
+      churnedThisMonth,
+      totalUsers,
+      churnRate: totalUsers > 0 ? Math.round((churnedThisMonth / totalUsers) * 100 * 10) / 10 : 0,
+      cohorts: cohorts.reverse(),
+      inactiveUsers,
+    })
+  })
+
+  // GET /admin/subscriptions/metrics — MRR, conversion, events
+  app.get('/subscriptions/metrics', async (_req, reply) => {
+    const now = new Date()
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const last30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+    const [monthly, annual, cancelled, free, recentChanges] = await Promise.all([
+      prisma.subscription.count({ where: { tier: 'PREMIUM_MONTHLY', status: 'ACTIVE' } }),
+      prisma.subscription.count({ where: { tier: 'PREMIUM_ANNUAL', status: 'ACTIVE' } }),
+      prisma.subscription.count({ where: { cancelledAt: { gte: startOfMonth } } }),
+      prisma.subscription.count({ where: { tier: 'FREE' } }),
+      prisma.subscription.findMany({
+        where: { updatedAt: { gte: last30 }, tier: { not: 'FREE' } },
+        select: {
+          tier: true, status: true, updatedAt: true, cancelledAt: true,
+          user: { select: { email: true, profile: { select: { firstName: true } } } },
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 20,
+      }),
+    ])
+
+    const mrr = Math.round(monthly * 4.99 + annual * (34.99 / 12))
+    const totalSubs = monthly + annual + free
+    const conversionRate = totalSubs > 0 ? Math.round(((monthly + annual) / totalSubs) * 100 * 10) / 10 : 0
+
+    const mrrTrend = await Promise.all(
+      Array.from({ length: 6 }, async (_, i) => {
+        const month = dayjs().subtract(5 - i, 'month')
+        const [pm, pa] = await Promise.all([
+          prisma.subscription.count({
+            where: { tier: 'PREMIUM_MONTHLY', status: 'ACTIVE', createdAt: { lte: month.endOf('month').toDate() } },
+          }),
+          prisma.subscription.count({
+            where: { tier: 'PREMIUM_ANNUAL', status: 'ACTIVE', createdAt: { lte: month.endOf('month').toDate() } },
+          }),
+        ])
+        return { month: month.format('MMM'), mrr: Math.round(pm * 4.99 + pa * (34.99 / 12)) }
+      })
+    )
+
+    return reply.send({ mrr, monthly, annual, free, cancelled, conversionRate, recentChanges, mrrTrend })
+  })
+
+  // POST /admin/notifications/inactive — send push to inactive users
+  app.post('/notifications/inactive', async (req, reply) => {
+    const body = z.object({
+      title: z.string().min(1).max(100),
+      message: z.string().min(1).max(300),
+      inactiveDays: z.coerce.number().min(1).max(90).default(7),
+    }).parse(req.body)
+
+    const inactiveSince = new Date(Date.now() - body.inactiveDays * 24 * 60 * 60 * 1000)
+
+    const devices = await prisma.userDevice.findMany({
+      where: {
+        isActive: true,
+        fcmToken: { not: null },
+        user: { deletedAt: null, OR: [{ lastLoginAt: { lt: inactiveSince } }, { lastLoginAt: null }] },
+      },
+      select: { fcmToken: true },
+    })
+
+    const { default: firebaseAdmin } = await import('@/config/firebase')
+    const messaging = firebaseAdmin.messaging()
+    const tokens = devices.map((d) => d.fcmToken!).filter(Boolean)
+    if (!tokens.length) return reply.send({ sent: 0, failed: 0, total: 0 })
+
+    const chunks: string[][] = []
+    for (let i = 0; i < tokens.length; i += 500) chunks.push(tokens.slice(i, i + 500))
+
+    let sent = 0; let failed = 0
+    for (const chunk of chunks) {
+      try {
+        const result = await messaging.sendEachForMulticast({
+          tokens: chunk,
+          notification: { title: body.title, body: body.message },
+          data: { type: 'reengagement' },
+          android: { priority: 'high', notification: { channelId: 'lunara_notifications', color: '#8b5cf6' } },
+        })
+        sent += result.successCount; failed += result.failureCount
+      } catch { failed += chunk.length }
+    }
+
+    return reply.send({ sent, failed, total: tokens.length })
   })
 
   // GET /admin/achievements — achievement management
