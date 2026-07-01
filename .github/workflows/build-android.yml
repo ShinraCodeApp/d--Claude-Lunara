@@ -43,7 +43,7 @@ jobs:
       - name: Write gradle.properties
         run: |
           cat > apps/mobile/android/gradle.properties << 'EOF'
-          org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
+          org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError
           android.useAndroidX=true
           android.enableJetifier=true
           android.enablePngCrunchInReleaseBuilds=true
