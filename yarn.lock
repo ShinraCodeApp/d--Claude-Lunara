@@ -12162,11 +12162,6 @@ react-native-gesture-handler@~2.16.1:
     lodash "^4.17.21"
     prop-types "^15.7.2"
 
-react-native-health-connect@^3.5.3:
-  version "3.5.3"
-  resolved "https://registry.yarnpkg.com/react-native-health-connect/-/react-native-health-connect-3.5.3.tgz#15cbb5659f3066337620490c76411e7605ba9b9d"
-  integrity sha512-lco68RbMaWpvElED3/obXTJSzoWopo9k5loN/+1zSdr3iT4STp7BaoziyPx0DIyW1a6DF/lvMesXIubWKE1Srw==
-
 react-native-helmet-async@2.0.4:
   version "2.0.4"
   resolved "https://registry.npmjs.org/react-native-helmet-async/-/react-native-helmet-async-2.0.4.tgz"
