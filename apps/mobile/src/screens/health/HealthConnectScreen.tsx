@@ -8,22 +8,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeInDown } from 'react-native-reanimated'
 import { router } from 'expo-router'
 import dayjs from 'dayjs'
-import {
-  getSdkStatus,
-  initialize,
-  requestPermission,
-  getGrantedPermissions,
-  openHealthConnectSettings,
-  readRecords,
-  insertRecords,
-  SdkAvailabilityStatus,
-} from 'react-native-health-connect'
 import { useCycleStore } from '@/store'
 
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
 
 // ─── Types ─────────────────────────────────────────────────────
-type ProviderKey = 'health_connect' | 'google_fit' | 'native_sensor'
+type ProviderKey = 'google_fit' | 'native_sensor'
 
 type HealthData = {
   steps: number | null
@@ -41,8 +31,6 @@ const EMPTY_DATA: HealthData = {
 const API_LEVEL = Platform.OS === 'android' ? (Platform.Version as number) : 0
 
 function getRecommended(): ProviderKey {
-  if (API_LEVEL >= 34) return 'health_connect'
-  if (API_LEVEL >= 21) return 'google_fit'
   return 'native_sensor'
 }
 
@@ -54,14 +42,6 @@ const PROVIDERS: {
   forSystem: string
   implemented: boolean
 }[] = [
-  {
-    id: 'health_connect',
-    emoji: '🔗',
-    name: 'Health Connect',
-    desc: 'Plataforma oficial de Google integrada en Android 14+. Pasos, sueño, frecuencia cardíaca, calorías y peso.',
-    forSystem: 'Android 14+ (API 34+)',
-    implemented: true,
-  },
   {
     id: 'google_fit',
     emoji: '💪',
@@ -79,73 +59,6 @@ const PROVIDERS: {
     implemented: true,
   },
 ]
-
-// ─── Health Connect logic ──────────────────────────────────────
-const HC_PERMISSIONS = [
-  { accessType: 'read' as const, recordType: 'Steps' as const },
-  { accessType: 'read' as const, recordType: 'SleepSession' as const },
-  { accessType: 'read' as const, recordType: 'HeartRate' as const },
-  { accessType: 'read' as const, recordType: 'ActiveCaloriesBurned' as const },
-  { accessType: 'read' as const, recordType: 'Weight' as const },
-  { accessType: 'write' as const, recordType: 'MenstruationFlow' as const },
-  { accessType: 'write' as const, recordType: 'MenstruationPeriod' as const },
-]
-
-async function syncHealthConnect(): Promise<{
-  data: HealthData
-  ok: boolean
-  sdkStatus?: number
-  error?: string
-  grantedCount?: number
-}> {
-  try {
-    const status = await getSdkStatus()
-    if (status !== SdkAvailabilityStatus.SDK_AVAILABLE) {
-      return { data: EMPTY_DATA, ok: false, sdkStatus: status }
-    }
-    const initialized = await initialize()
-    if (!initialized) return { data: EMPTY_DATA, ok: false, error: 'No se pudo inicializar Health Connect' }
-
-    const already = await getGrantedPermissions()
-    if (already.length === 0) await requestPermission(HC_PERMISSIONS)
-    const granted = await getGrantedPermissions()
-    if (granted.length === 0) return { data: EMPTY_DATA, ok: true, grantedCount: 0 }
-
-    const today = dayjs().startOf('day').toISOString()
-    const now = new Date().toISOString()
-    const yesterday = dayjs().subtract(1, 'day').startOf('day').toISOString()
-    const week = dayjs().subtract(7, 'day').toISOString()
-
-    const [stepsR, sleepR, hrR, calR, weightR] = await Promise.allSettled([
-      readRecords('Steps', { timeRangeFilter: { operator: 'between', startTime: today, endTime: now } }),
-      readRecords('SleepSession', { timeRangeFilter: { operator: 'between', startTime: yesterday, endTime: now } }),
-      readRecords('HeartRate', { timeRangeFilter: { operator: 'between', startTime: today, endTime: now } }),
-      readRecords('ActiveCaloriesBurned', { timeRangeFilter: { operator: 'between', startTime: today, endTime: now } }),
-      readRecords('Weight', { timeRangeFilter: { operator: 'between', startTime: week, endTime: now } }),
-    ])
-
-    const steps = stepsR.status === 'fulfilled'
-      ? stepsR.value.records.reduce((s: number, r: any) => s + (r.count ?? 0), 0) : null
-    const sleepHours = sleepR.status === 'fulfilled' && sleepR.value.records.length > 0
-      ? (() => {
-          const s = sleepR.value.records[sleepR.value.records.length - 1] as any
-          return Math.round(((new Date(s.endTime).getTime() - new Date(s.startTime).getTime()) / 3600000) * 10) / 10
-        })()
-      : null
-    const hrSamples = hrR.status === 'fulfilled' ? hrR.value.records as any[] : []
-    const heartRate = hrSamples.length > 0
-      ? Math.round(hrSamples[hrSamples.length - 1]?.samples?.[0]?.beatsPerMinute ?? 0) || null : null
-    const calories = calR.status === 'fulfilled'
-      ? Math.round(calR.value.records.reduce((s: number, r: any) => s + (r.energy?.inKilocalories ?? 0), 0)) || null : null
-    const weightRecs = weightR.status === 'fulfilled' ? weightR.value.records as any[] : []
-    const weight = weightRecs.length > 0
-      ? Math.round((weightRecs[weightRecs.length - 1]?.weight?.inKilograms ?? 0) * 10) / 10 || null : null
-
-    return { data: { steps, sleepHours, heartRate, calories, weight }, ok: true, grantedCount: granted.length }
-  } catch (e: any) {
-    return { data: EMPTY_DATA, ok: false, error: e?.message ?? 'Error desconocido' }
-  }
-}
 
 // ─── Native Sensor (Pedometer) logic ──────────────────────────
 async function syncNativeSensor(): Promise<{ data: HealthData; ok: boolean; error?: string; available?: boolean }> {
@@ -176,8 +89,6 @@ export default function HealthConnectScreen() {
   const [synced, setSynced] = useState(false)
   const [data, setData] = useState<HealthData>(EMPTY_DATA)
   const [error, setError] = useState<string | null>(null)
-  const [sdkStatus, setSdkStatus] = useState<number | null>(null)
-  const [grantedCount, setGrantedCount] = useState<number | null>(null)
   const [sensorAvailable, setSensorAvailable] = useState<boolean | null>(null)
 
   const activeProvider = React.useRef<ProviderKey>(selected)
@@ -189,8 +100,6 @@ export default function HealthConnectScreen() {
     setSynced(false)
     setData(EMPTY_DATA)
     setError(null)
-    setSdkStatus(null)
-    setGrantedCount(null)
     setSensorAvailable(null)
   }, [selected])
 
@@ -199,14 +108,7 @@ export default function HealthConnectScreen() {
     setLoading(true)
     setError(null)
 
-    if (selected === 'health_connect') {
-      const r = await syncHealthConnect()
-      if (activeProvider.current !== providerAtStart) return
-      setData(r.data)
-      setSdkStatus(r.sdkStatus ?? null)
-      setGrantedCount(r.grantedCount ?? null)
-      if (r.error) setError(r.error)
-    } else if (selected === 'native_sensor') {
+    if (selected === 'native_sensor') {
       const r = await syncNativeSensor()
       if (activeProvider.current !== providerAtStart) return
       setData(r.data)
@@ -309,9 +211,7 @@ export default function HealthConnectScreen() {
             ) : (
               <>
                 <Text style={styles.syncBody}>
-                  {selected === 'health_connect'
-                    ? 'Lunara leerá tus pasos, sueño, ritmo cardíaco y más desde Health Connect.'
-                    : 'Lunara leerá los pasos directamente del sensor de tu teléfono, sin apps externas.'}
+                  Lunara leerá los pasos directamente del sensor de tu teléfono, sin apps externas.
                 </Text>
                 <TouchableOpacity
                   style={[styles.syncBtn, loading && styles.syncBtnDisabled]}
@@ -332,43 +232,13 @@ export default function HealthConnectScreen() {
                   </View>
                 )}
 
-                {/* Health Connect — SDK not available */}
-                {selected === 'health_connect' && synced && sdkStatus !== null && sdkStatus !== SdkAvailabilityStatus.SDK_AVAILABLE && (
-                  <View style={styles.notAvailableBox}>
-                    <Text style={styles.notAvailableText}>
-                      {sdkStatus === 3
-                        ? '⚠️ Health Connect necesita actualizarse en tu dispositivo.\n\nAbre Play Store y actualiza "Health Connect".'
-                        : '⚠️ Health Connect no está disponible. Intenta instalarlo desde Play Store.'}
-                    </Text>
-                    <TouchableOpacity onPress={() => Linking.openURL('https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata')}>
-                      <Text style={styles.linkText}>Instalar / Actualizar Health Connect →</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.hintText}>💡 Alternativa: usa "Sensor del Teléfono" para pasos sin apps externas</Text>
-                  </View>
-                )}
-
-                {/* Health Connect — permissions denied */}
-                {selected === 'health_connect' && synced && grantedCount === 0 && !error && (
-                  <View style={styles.notAvailableBox}>
-                    <Text style={styles.notAvailableText}>
-                      🔒 Permisos de salud denegados. Ve a Ajustes → Apps → Lunara → Permisos y actívalos.
-                    </Text>
-                    <TouchableOpacity onPress={() => Linking.openSettings()} style={{ marginTop: 4 }}>
-                      <Text style={styles.linkText}>Abrir ajustes de Lunara →</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => openHealthConnectSettings()} style={{ marginTop: 4 }}>
-                      <Text style={styles.linkText}>Abrir Health Connect →</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
                 {/* Native sensor — not available */}
                 {selected === 'native_sensor' && synced && sensorAvailable === false && (
                   <View style={styles.notAvailableBox}>
                     <Text style={styles.notAvailableText}>
                       ⚠️ Este dispositivo no tiene sensor de pasos por hardware.
                     </Text>
-                    <Text style={styles.hintText}>💡 Prueba con Health Connect o Google Fit</Text>
+                    <Text style={styles.hintText}>💡 Prueba con Google Fit</Text>
                   </View>
                 )}
               </>
