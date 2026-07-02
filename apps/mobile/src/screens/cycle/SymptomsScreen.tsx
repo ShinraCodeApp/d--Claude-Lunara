@@ -98,7 +98,7 @@ export default function SymptomsScreen() {
   const [saved, setSaved] = useState(false)
   const { ttcMode } = useSettingsStore()
   const { updateLog, deleteLog, getLogForDate } = useSymptomStore()
-  const { currentPhase } = useCycleStore()
+  const { currentPhase, currentCycleId, setCurrentCycle } = useCycleStore()
 
   // Detect existing log and pre-fill
   const existingLog = getLogForDate(targetDate)
@@ -162,7 +162,7 @@ export default function SymptomsScreen() {
       setOrgasm(existingLog.intimacy.orgasm)
       setDesireLevel(existingLog.intimacy.desireLevel)
     }
-  }, [targetDate])
+  }, [targetDate, existingLog?.id])
   const { xp, crystalBalance, level, setGarden } = useGardenStore()
   // Capture whether log existed BEFORE this screen opened, to avoid giving XP on edits
   const isNewLog = !existingLog
@@ -214,6 +214,29 @@ export default function SymptomsScreen() {
       const withTimeout = (p: Promise<any>) => Promise.race([p, timeout(8000)]).catch(() => null)
 
       const promises: Promise<any>[] = []
+
+      // Sync period/cycle data to API so calendar shows colors
+      if (isPeriod) {
+        const intensityMap: Record<string, string> = {
+          spotting: 'SPOTTING', light: 'LIGHT', medium: 'MEDIUM', heavy: 'HEAVY',
+        }
+        const apiIntensity = intensityMap[periodIntensity] ?? 'MEDIUM'
+        if (currentCycleId) {
+          promises.push(
+            withTimeout(
+              apiClient.post(`/cycles/${currentCycleId}/bleeding`, { date: targetDate, intensity: apiIntensity })
+            )
+          )
+        } else {
+          promises.push(
+            withTimeout(
+              apiClient.post('/cycles', { startDate: targetDate })
+                .then((r) => { if (r?.data?.id) setCurrentCycle({ currentCycleId: r.data.id, isInPeriod: true, currentPhase: 'menstrual' }) })
+            )
+          )
+        }
+      }
+
       if (selectedMood) {
         promises.push(withTimeout(apiClient.post('/symptoms/mood', { date: targetDate, mood: selectedMood, intensity: moodIntensity, notes })))
       }
@@ -233,6 +256,7 @@ export default function SymptomsScreen() {
       }
       setSaved(true)
       queryClient.invalidateQueries({ queryKey: ['cycles', 'current'] })
+      if (isPeriod) queryClient.invalidateQueries({ queryKey: ['cycles', 'calendar'] })
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
 
       // Prompt for store review after 5th log
