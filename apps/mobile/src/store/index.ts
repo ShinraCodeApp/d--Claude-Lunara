@@ -366,7 +366,7 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      theme: 'auto',
+      theme: 'dark',
       locale: 'es',
       useMascot: true,
       notificationsEnabled: false,
