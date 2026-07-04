@@ -155,8 +155,9 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (!isAuthenticated) return
-    requestNotificationPermissions().then((granted) => {
+    requestNotificationPermissions().then(async (granted) => {
       if (!granted) return
+
       scheduleAllCycleNotifications({
         nextPeriodDate,
         fertileWindowStart,
@@ -167,17 +168,42 @@ function RootLayoutNav() {
         logReminderHour,
         pillReminderHour,
       })
+
+      // Register FCM token with backend
+      try {
+        const { data: tokenData } = await Notifications.getDevicePushTokenAsync()
+        if (tokenData) {
+          const { Platform } = await import('react-native')
+          await import('@/api/client').then(({ default: api }) =>
+            api.post('/notifications/register-device', {
+              fcmToken: tokenData,
+              platform: Platform.OS,
+              appVersion: require('../../app.json').expo.version,
+            }).catch(() => null)
+          )
+        }
+      } catch {
+        // Token registration is non-critical
+      }
     })
   }, [isAuthenticated, nextPeriodDate])
 
-  // Handle notification response (quick log action button)
+  // Handle notification tap — route to correct screen
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const actionId = response.actionIdentifier
-      const screen = response.notification.request.content.data?.screen as string | undefined
+      const data = response.notification.request.content.data ?? {}
+      const screen = data.screen as string | undefined
+      const type = data.type as string | undefined
+
       if (actionId === 'OPEN_LOG' || actionId === Notifications.DEFAULT_ACTION_IDENTIFIER) {
-        if (screen) router.push(screen as any)
-        else router.push('/(tabs)/log')
+        if (type === 'article' || screen === '/community') {
+          router.push('/community' as any)
+        } else if (screen) {
+          router.push(screen as any)
+        } else {
+          router.push('/(tabs)/log')
+        }
       }
     })
     return () => sub.remove()

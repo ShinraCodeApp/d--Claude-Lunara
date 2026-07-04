@@ -103,29 +103,15 @@ export class NotificationService {
     try {
       await admin.messaging().send({
         token: device.fcmToken,
-        notification: {
-          title: notification.title,
-          body: notification.body,
-        },
+        notification: { title: notification.title, body: notification.body },
         data: notification.data,
         android: {
           priority: 'high',
-          notification: {
-            channelId: 'lunara_notifications',
-            color: '#8b5cf6',
-          },
+          notification: { channelId: 'lunara_notifications', color: '#8b5cf6' },
         },
-        apns: {
-          payload: {
-            aps: {
-              badge: 1,
-              sound: 'default',
-            },
-          },
-        },
+        apns: { payload: { aps: { badge: 1, sound: 'default' } } },
       })
 
-      // Save to DB
       await prisma.notification.create({
         data: {
           userId,
@@ -138,14 +124,80 @@ export class NotificationService {
       })
     } catch (err) {
       console.error('FCM send error:', err)
-      // Mark token as inactive if invalid
       if ((err as any)?.code === 'messaging/invalid-registration-token') {
-        await prisma.userDevice.update({
-          where: { id: device.id },
-          data: { isActive: false },
-        })
+        await prisma.userDevice.update({ where: { id: device.id }, data: { isActive: false } })
       }
     }
+  }
+
+  async broadcastArticleNotification(article: { id: string; title: string; excerpt: string }) {
+    if (!admin.apps.length) return // Firebase not configured
+
+    // Get all active devices with FCM tokens
+    const devices = await prisma.userDevice.findMany({
+      where: { isActive: true, fcmToken: { not: null } },
+      select: { fcmToken: true, userId: true, id: true },
+    })
+
+    if (devices.length === 0) return
+
+    const tokens = devices.map((d) => d.fcmToken!).filter(Boolean)
+    const payload = {
+      notification: {
+        title: '📰 Nueva publicación de Lunara',
+        body: article.title,
+      },
+      data: {
+        type: 'article',
+        articleId: article.id,
+        screen: '/community',
+      },
+      android: {
+        priority: 'high' as const,
+        notification: { channelId: 'lunara_notifications', color: '#8b5cf6' },
+      },
+      apns: { payload: { aps: { badge: 1, sound: 'default' } } },
+    }
+
+    // FCM allows max 500 tokens per batch
+    const BATCH = 500
+    const invalidTokens: string[] = []
+
+    for (let i = 0; i < tokens.length; i += BATCH) {
+      const batch = tokens.slice(i, i + BATCH)
+      try {
+        const res = await admin.messaging().sendEachForMulticast({ tokens: batch, ...payload })
+        res.responses.forEach((r, idx) => {
+          if (!r.success && r.error?.code === 'messaging/invalid-registration-token') {
+            invalidTokens.push(batch[idx])
+          }
+        })
+      } catch (err) {
+        console.error('FCM broadcast batch error:', err)
+      }
+    }
+
+    // Deactivate invalid tokens
+    if (invalidTokens.length > 0) {
+      await prisma.userDevice.updateMany({
+        where: { fcmToken: { in: invalidTokens } },
+        data: { isActive: false },
+      })
+    }
+
+    // Save one notification record per user (fire-and-forget)
+    const userIds = [...new Set(devices.map((d) => d.userId))]
+    await prisma.notification.createMany({
+      data: userIds.map((userId) => ({
+        userId,
+        type: 'ARTICLE_PUBLISHED' as any,
+        title: '📰 Nueva publicación de Lunara',
+        body: article.title,
+        data: { articleId: article.id, screen: '/community' },
+        sentAt: new Date(),
+      })),
+      skipDuplicates: true,
+    })
   }
 
   async schedulePeriodReminders(userId: string) {

@@ -3,6 +3,9 @@ import { z } from 'zod'
 import { authenticate, requireAdmin } from '@/middleware/auth.middleware'
 import { prisma } from '@/config/database'
 import dayjs from 'dayjs'
+import { NotificationService } from '@/modules/notifications/notification.service'
+
+const notifService = new NotificationService()
 
 export async function adminRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate)
@@ -549,6 +552,14 @@ export async function adminRoutes(app: FastifyInstance) {
     const article = await prisma.article.create({
       data: { ...body, authorId: req.currentUser.id },
     })
+
+    // Fire-and-forget push broadcast when publishing
+    if (article.isPublished) {
+      notifService.broadcastArticleNotification(article).catch((e) =>
+        console.error('broadcast failed:', e)
+      )
+    }
+
     return reply.status(201).send(article)
   })
 
@@ -565,7 +576,16 @@ export async function adminRoutes(app: FastifyInstance) {
       isPublished: z.boolean().optional(),
     }).parse(req.body)
 
+    const before = await prisma.article.findUnique({ where: { id }, select: { isPublished: true } })
     const article = await prisma.article.update({ where: { id }, data: body })
+
+    // Broadcast only when transitioning from draft → published
+    if (!before?.isPublished && article.isPublished) {
+      notifService.broadcastArticleNotification(article).catch((e) =>
+        console.error('broadcast failed:', e)
+      )
+    }
+
     return reply.send(article)
   })
 
