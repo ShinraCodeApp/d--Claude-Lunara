@@ -296,6 +296,9 @@ export default function ProfileScreen() {
       >
         {/* ─── Header ─────────────────────────────────── */}
         <Animated.View entering={FadeInDown.delay(0)} style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <Text style={styles.backText}>←</Text>
+          </TouchableOpacity>
           <Text style={styles.screenTitle}>Mi Perfil</Text>
         </Animated.View>
 
@@ -433,7 +436,9 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: Spacing.md, gap: Spacing.md },
-  header: { marginBottom: Spacing.sm },
+  header: { marginBottom: Spacing.sm, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  backBtn: { padding: 4 },
+  backText: { color: Colors.lavender[300], fontSize: 22 },
   screenTitle: {
     fontSize: Typography.fontSize['2xl'], fontFamily: Typography.fontFamily.bold, color: '#fff',
   },

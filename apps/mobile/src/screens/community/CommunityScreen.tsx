@@ -365,7 +365,11 @@ export default function CommunityScreen() {
     <LinearGradient colors={['#0d0118', '#1a0533']} style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')}
+          style={styles.backBtn}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
           <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
