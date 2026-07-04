@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
   FlatList, TextInput, Modal, KeyboardAvoidingView,
@@ -14,9 +14,12 @@ import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/es'
 
+import { MMKV } from 'react-native-mmkv'
 import { useCycleStore } from '@/store'
 import apiClient from '@/api/client'
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
+
+const communityStorage = new MMKV({ id: 'lunara-community' })
 
 dayjs.extend(relativeTime)
 dayjs.locale('es')
@@ -128,6 +131,10 @@ export default function CommunityScreen() {
   const queryClient = useQueryClient()
 
   const [mainTab, setMainTab] = useState<MainTab>('comunidad')
+  const [hasNewNews, setHasNewNews] = useState(() => {
+    const last = communityStorage.getNumber('newsLastViewed') ?? 0
+    return Date.now() - last > 6 * 60 * 60 * 1000 // badge if not viewed in last 6h
+  })
   const [category, setCategory] = useState<Category>('all')
   const [showCompose, setShowCompose] = useState(false)
   const [composeText, setComposeText] = useState('')
@@ -382,9 +389,18 @@ export default function CommunityScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.mainTabBtn, mainTab === 'noticias' && styles.mainTabBtnActive]}
-          onPress={() => setMainTab('noticias')}
+          onPress={() => {
+            setMainTab('noticias')
+            if (hasNewNews) {
+              setHasNewNews(false)
+              communityStorage.set('newsLastViewed', Date.now())
+            }
+          }}
         >
-          <Text style={[styles.mainTabText, mainTab === 'noticias' && styles.mainTabTextActive]}>📰 Noticias</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={[styles.mainTabText, mainTab === 'noticias' && styles.mainTabTextActive]}>📰 Noticias</Text>
+            {hasNewNews && <View style={styles.newsBadge} />}
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -577,13 +593,18 @@ const styles = StyleSheet.create({
   mainTabBtnActive: { backgroundColor: Colors.primary[700] },
   mainTabText: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.4)' },
   mainTabTextActive: { color: '#fff', fontFamily: Typography.fontFamily.bold },
+  newsBadge: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: '#f43f5e',
+  },
 
   // Community tab
-  filterList: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, gap: 8 },
+  filterList: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, gap: 8, alignItems: 'center' },
   filterChip: {
     paddingHorizontal: Spacing.md, paddingVertical: 6,
     borderRadius: BorderRadius.full, backgroundColor: 'rgba(255,255,255,0.07)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    alignSelf: 'flex-start',
   },
   filterChipActive: { backgroundColor: Colors.primary[700], borderColor: Colors.primary[500] },
   filterText: { color: 'rgba(255,255,255,0.5)', fontSize: Typography.fontSize.sm },
