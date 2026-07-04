@@ -64,16 +64,23 @@ export class CycleService {
       data: { endDate: dayjs(data.startDate).subtract(1, 'day').toDate() },
     })
 
+    // Get user's average period length for auto-fill
+    const profile = await prisma.userProfile.findUnique({ where: { userId } })
+    const avgPeriodLength = profile?.averagePeriodLength ?? 5
+
+    // Auto-create bleeding days for the estimated period duration
+    const bleedingDaysToCreate = Array.from({ length: avgPeriodLength }, (_, i) => ({
+      date: dayjs(data.startDate).add(i, 'day').toDate(),
+      intensity: i === 0 ? 'MEDIUM' : i < avgPeriodLength - 1 ? 'MEDIUM' : 'LIGHT' as any,
+    }))
+
     const cycle = await prisma.menstrualCycle.create({
       data: {
         userId,
         startDate: new Date(data.startDate),
         notes: data.notes,
         bleedingDays: {
-          create: {
-            date: new Date(data.startDate),
-            intensity: 'MEDIUM',
-          },
+          create: bleedingDaysToCreate,
         },
       },
       include: { bleedingDays: true },
