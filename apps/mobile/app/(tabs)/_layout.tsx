@@ -1,6 +1,7 @@
 import { Tabs, router, usePathname } from 'expo-router'
 import { Platform, View, Text, StyleSheet, BackHandler, Alert } from 'react-native'
-import { useEffect } from 'react'
+import { useCallback } from 'react'
+import { useFocusEffect } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { BlurView } from 'expo-blur'
 import { Colors, Typography, Spacing } from '@/theme'
@@ -29,20 +30,22 @@ export default function TabsLayout() {
   const { isDark } = useAppTheme()
   const pathname = usePathname()
 
-  useEffect(() => {
-    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (pathname !== '/(tabs)' && pathname !== '/') {
-        router.navigate('/(tabs)')
+  useFocusEffect(
+    useCallback(() => {
+      const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (pathname !== '/(tabs)' && pathname !== '/') {
+          router.navigate('/(tabs)')
+          return true
+        }
+        Alert.alert('Salir', '¿Querés cerrar Lunara?', [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Salir', style: 'destructive', onPress: () => BackHandler.exitApp() },
+        ])
         return true
-      }
-      Alert.alert('Salir', '¿Querés cerrar Lunara?', [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Salir', style: 'destructive', onPress: () => BackHandler.exitApp() },
-      ])
-      return true
-    })
-    return () => handler.remove()
-  }, [pathname])
+      })
+      return () => handler.remove()
+    }, [pathname])
+  )
 
   const tabBg = isDark ? '#1a0533' : Colors.primary[50]
   const inactiveColor = isDark ? 'rgba(255,255,255,0.3)' : 'rgba(109,40,217,0.4)'
