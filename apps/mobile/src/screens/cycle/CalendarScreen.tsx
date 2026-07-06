@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator, RefreshControl,
@@ -11,6 +11,8 @@ import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 import weekday from 'dayjs/plugin/weekday'
 import isBetween from 'dayjs/plugin/isBetween'
+import isSameOrAfter from 'dayjs/plugin/isSameOrAfter'
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore'
 import { router } from 'expo-router'
 
 import { useCalendar } from '@/api/hooks/useCycle'
@@ -19,6 +21,8 @@ import { Colors, Typography, Spacing, BorderRadius, Shadows } from '@/theme'
 
 dayjs.extend(weekday)
 dayjs.extend(isBetween)
+dayjs.extend(isSameOrAfter)
+dayjs.extend(isSameOrBefore)
 dayjs.locale('es')
 
 const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
@@ -44,9 +48,26 @@ const DAY_COLORS: Record<string, { bg: string; border: string; label: string; em
   normal: { bg: 'transparent', border: 'transparent', label: '', emoji: '' },
 }
 
+const FERTILITY_BY_TYPE: Record<string, { level: 'ALTA' | 'MEDIA' | 'BAJA'; color: string; protect: boolean }> = {
+  ovulation:        { level: 'ALTA',  color: '#22c55e', protect: true },
+  fertile:          { level: 'ALTA',  color: '#22c55e', protect: true },
+  period:           { level: 'BAJA',  color: '#94a3b8', protect: false },
+  predicted_period: { level: 'BAJA',  color: '#94a3b8', protect: false },
+  normal:           { level: 'BAJA',  color: '#94a3b8', protect: false },
+}
+
+const PHASE_LABEL: Record<string, string> = {
+  period:           'Menstruación',
+  predicted_period: 'Período predicho',
+  ovulation:        'Ovulación',
+  fertile:          'Ventana fértil',
+  normal:           '',
+}
+
 export default function CalendarScreen() {
   const insets = useSafeAreaInsets()
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const today = dayjs().format('YYYY-MM-DD')
+  const [selectedDate, setSelectedDate] = useState<string | null>(today)
   const [currentMonth, setCurrentMonth] = useState(dayjs())
 
   const { data, isLoading, isFetching, refetch } = useCalendar(currentMonth.year(), currentMonth.month() + 1)
@@ -107,8 +128,33 @@ export default function CalendarScreen() {
   const prevMonth = () => setCurrentMonth((m) => m.subtract(1, 'month'))
   const nextMonth = () => setCurrentMonth((m) => m.add(1, 'month'))
 
-  const selectedDayInfo = selectedDate ? days[selectedDate] : null
-  const isToday = (date: string) => date === dayjs().format('YYYY-MM-DD')
+  const selectedDayInfo = selectedDate ? mergedDays[selectedDate] : null
+  const isToday = (date: string) => date === today
+
+  // Cycle day number for selected date
+  const selectedCycleDay = useMemo(() => {
+    if (!selectedDate || !data?.cycles?.length) return null
+    const cycle = (data.cycles as Array<{ startDate: string; endDate?: string }>).find((c) =>
+      dayjs(selectedDate).isSameOrAfter(dayjs(c.startDate), 'day') &&
+      (!c.endDate || dayjs(selectedDate).isSameOrBefore(dayjs(c.endDate), 'day'))
+    )
+    if (!cycle) return null
+    return dayjs(selectedDate).diff(dayjs(cycle.startDate), 'day') + 1
+  }, [selectedDate, data?.cycles])
+
+  // Fertility level for selected date
+  const fertilityInfo = useMemo(() => {
+    if (!selectedDate) return null
+    const dayType = mergedDays[selectedDate]?.type || 'normal'
+    const scores = data?.prediction?.dailyFertilityScores as Record<string, number> | undefined
+    const score = scores?.[selectedDate]
+    if (score !== undefined) {
+      if (score >= 0.65) return { level: 'ALTA' as const,  color: '#22c55e', protect: true }
+      if (score >= 0.3)  return { level: 'MEDIA' as const, color: '#f59e0b', protect: false }
+      return { level: 'BAJA' as const, color: '#94a3b8', protect: false }
+    }
+    return FERTILITY_BY_TYPE[dayType] ?? FERTILITY_BY_TYPE.normal
+  }, [selectedDate, mergedDays, data?.prediction])
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -211,27 +257,42 @@ export default function CalendarScreen() {
         {/* ─── Selected day info ─────────────────────────── */}
         {selectedDate && (
           <Animated.View entering={FadeInDown} style={styles.selectedInfo}>
+            {/* Date + cycle day */}
             <Text style={styles.selectedDateText}>
-              {dayjs(selectedDate).format('dddd, D [de] MMMM')}
+              {dayjs(selectedDate).format('D MMM YYYY')}
             </Text>
+            {(selectedCycleDay || selectedDayInfo) && (
+              <Text style={styles.cycleDayText}>
+                {selectedCycleDay ? `Día del Ciclo ${selectedCycleDay}` : ''}
+                {selectedCycleDay && selectedDayInfo?.type && selectedDayInfo.type !== 'normal' ? ' · ' : ''}
+                {selectedDayInfo?.type && selectedDayInfo.type !== 'normal' ? PHASE_LABEL[selectedDayInfo.type] ?? '' : ''}
+              </Text>
+            )}
 
-            {/* Cycle phase info from API */}
-            {selectedDayInfo && (
-              <View style={styles.selectedDayDetail}>
-                <Text style={styles.selectedDayEmoji}>
-                  {DAY_COLORS[selectedDayInfo.type]?.emoji || '📅'}
-                </Text>
-                <View>
-                  <Text style={styles.selectedDayLabel}>
-                    {DAY_COLORS[selectedDayInfo.type]?.label || 'Sin datos'}
+            {/* Fertility probability */}
+            {fertilityInfo && (
+              <View style={[styles.fertilityRow, { borderColor: fertilityInfo.color + '55' }]}>
+                <View style={[styles.fertilityBadge, { backgroundColor: fertilityInfo.color + '22' }]}>
+                  <Text style={[styles.fertilityLevel, { color: fertilityInfo.color }]}>
+                    {fertilityInfo.level}
                   </Text>
-                  {selectedDayInfo.intensity && (
-                    <Text style={styles.intensityLabel}>
-                      Intensidad: {INTENSITY_LABELS[selectedDayInfo.intensity] || selectedDayInfo.intensity}
-                    </Text>
-                  )}
                 </View>
+                <Text style={styles.fertilityDesc}>Posibilidad de quedar embarazada</Text>
               </View>
+            )}
+
+            {/* Protection recommendation */}
+            {fertilityInfo?.protect && (
+              <View style={styles.protectRow}>
+                <Text style={styles.protectText}>🛡️ Se recomienda usar protección</Text>
+              </View>
+            )}
+
+            {/* Intensity if period */}
+            {selectedDayInfo?.intensity && (
+              <Text style={styles.intensityLabel}>
+                Intensidad: {INTENSITY_LABELS[selectedDayInfo.intensity] || selectedDayInfo.intensity}
+              </Text>
             )}
 
             {/* Logged icons summary */}
@@ -418,11 +479,54 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.border,
   },
   selectedDateText: {
-    fontSize: Typography.fontSize.md,
+    fontSize: Typography.fontSize.lg,
     fontFamily: Typography.fontFamily.bold,
     color: Colors.dark.text,
     textTransform: 'capitalize',
+    marginBottom: 2,
+  },
+  cycleDayText: {
+    fontSize: Typography.fontSize.sm,
+    color: Colors.lavender[300],
+    fontFamily: Typography.fontFamily.medium,
     marginBottom: Spacing.sm,
+  },
+  fertilityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderWidth: 1,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.sm,
+    marginBottom: 6,
+  },
+  fertilityBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+  },
+  fertilityLevel: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.bold,
+  },
+  fertilityDesc: {
+    fontSize: Typography.fontSize.sm,
+    color: Colors.dark.muted,
+    flex: 1,
+  },
+  protectRow: {
+    backgroundColor: 'rgba(251,191,36,0.1)',
+    borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+    marginBottom: Spacing.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(251,191,36,0.25)',
+  },
+  protectText: {
+    fontSize: Typography.fontSize.sm,
+    color: '#fbbf24',
+    fontFamily: Typography.fontFamily.medium,
   },
   selectedDayDetail: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.sm },
   iconSummaryRow: {
