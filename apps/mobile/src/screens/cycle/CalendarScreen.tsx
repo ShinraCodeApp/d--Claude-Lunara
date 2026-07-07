@@ -60,7 +60,7 @@ const PHASE_LABEL: Record<string, string> = {
   period:           'Menstruación',
   predicted_period: 'Período predicho',
   ovulation:        'Ovulación',
-  fertile:          'Ventana fértil',
+  fertile:          'Fertilidad',
   normal:           '',
 }
 
@@ -146,11 +146,15 @@ export default function CalendarScreen() {
   const fertilityInfo = useMemo(() => {
     if (!selectedDate) return null
     const dayType = mergedDays[selectedDate]?.type || 'normal'
+    const isHighFertilityDay = dayType === 'ovulation' || dayType === 'fertile'
     const scores = data?.prediction?.dailyFertilityScores as Record<string, number> | undefined
     const score = scores?.[selectedDate]
     if (score !== undefined) {
-      if (score >= 0.65) return { level: 'ALTA' as const,  color: '#22c55e', protect: true }
-      if (score >= 0.3)  return { level: 'MEDIA' as const, color: '#f59e0b', protect: false }
+      if (score >= 0.65 || isHighFertilityDay) {
+        const level = score >= 0.65 ? 'ALTA' : isHighFertilityDay ? 'ALTA' : 'MEDIA'
+        return { level: level as 'ALTA', color: '#22c55e', protect: true }
+      }
+      if (score >= 0.3) return { level: 'MEDIA' as const, color: '#f59e0b', protect: false }
       return { level: 'BAJA' as const, color: '#94a3b8', protect: false }
     }
     return FERTILITY_BY_TYPE[dayType] ?? FERTILITY_BY_TYPE.normal
@@ -264,7 +268,7 @@ export default function CalendarScreen() {
             {(selectedCycleDay || selectedDayInfo) && (
               <Text style={styles.cycleDayText}>
                 {selectedCycleDay ? `Día del Ciclo ${selectedCycleDay}` : ''}
-                {selectedCycleDay && selectedDayInfo?.type && selectedDayInfo.type !== 'normal' ? ' · ' : ''}
+                {selectedCycleDay && selectedDayInfo?.type && selectedDayInfo.type !== 'normal' ? ' - ' : ''}
                 {selectedDayInfo?.type && selectedDayInfo.type !== 'normal' ? PHASE_LABEL[selectedDayInfo.type] ?? '' : ''}
               </Text>
             )}
