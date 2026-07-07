@@ -178,7 +178,7 @@ function RootLayoutNav() {
             api.post('/notifications/register-device', {
               fcmToken: tokenData,
               platform: Platform.OS,
-              appVersion: require('../../app.json').expo.version,
+              appVersion: require('../app.json').expo.version,
             }).catch(() => null)
           )
         }
