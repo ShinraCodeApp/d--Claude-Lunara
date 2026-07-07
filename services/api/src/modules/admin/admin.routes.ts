@@ -589,6 +589,20 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.send(article)
   })
 
+  // POST /admin/articles/:id/rebroadcast — re-send push notification for an already-published article
+  app.post('/articles/:id/rebroadcast', async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
+    const article = await prisma.article.findUnique({ where: { id } })
+    if (!article) return reply.status(404).send({ error: 'Artículo no encontrado' })
+    if (!article.isPublished) return reply.status(400).send({ error: 'El artículo debe estar publicado para republicar' })
+
+    notifService.broadcastArticleNotification(article).catch((e) =>
+      console.error('rebroadcast failed:', e)
+    )
+
+    return reply.send({ ok: true })
+  })
+
   // DELETE /admin/articles/:id
   app.delete('/articles/:id', async (req, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params)

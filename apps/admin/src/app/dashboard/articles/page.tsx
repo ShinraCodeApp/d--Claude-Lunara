@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, Edit, Pin, Eye, EyeOff, ChevronLeft, ChevronRight, Megaphone } from 'lucide-react'
+import { Plus, Trash2, Edit, Pin, Eye, EyeOff, ChevronLeft, ChevronRight, Megaphone, Send } from 'lucide-react'
 import adminApi from '@/lib/api'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
@@ -67,6 +67,12 @@ export default function ArticlesPage() {
     mutationFn: (id: string) => adminApi.post(`/admin/articles/${id}/announce`),
     onSuccess: () => alert('✅ Artículo anunciado en la comunidad como publicación oficial'),
     onError: (e: any) => alert(e?.response?.data?.error ?? 'Error al anunciar'),
+  })
+
+  const rebroadcastMutation = useMutation({
+    mutationFn: (id: string) => adminApi.post(`/admin/articles/${id}/rebroadcast`),
+    onSuccess: () => alert('✅ Notificación push reenviada a todos los usuarios'),
+    onError: (e: any) => alert(e?.response?.data?.error ?? 'Error al republicar'),
   })
 
   const togglePin = (article: Article) =>
@@ -307,6 +313,16 @@ export default function ArticlesPage() {
                       >
                         <Megaphone size={14} />
                       </button>
+                      {a.isPublished && (
+                        <button
+                          onClick={() => { if (confirm(`¿Reenviar notificación push de "${a.title}" a todos los usuarios?`)) rebroadcastMutation.mutate(a.id) }}
+                          title="Republicar — reenviar push a todos"
+                          className="p-1.5 rounded-lg text-sky-600 hover:text-sky-400 hover:bg-sky-950 transition-colors"
+                          disabled={rebroadcastMutation.isPending}
+                        >
+                          <Send size={14} />
+                        </button>
+                      )}
                       <button
                         onClick={() => { if (confirm('¿Eliminar este artículo?')) deleteMutation.mutate(a.id) }}
                         className="p-1.5 rounded-lg text-red-600 hover:text-red-400 hover:bg-red-950 transition-colors"
