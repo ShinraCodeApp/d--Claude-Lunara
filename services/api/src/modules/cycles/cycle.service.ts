@@ -193,7 +193,7 @@ export class CycleService {
       }
     }
 
-    // Mark predicted days
+    // Mark predicted next cycle days (period, ovulation, fertile)
     if (prediction) {
       const predStart = dayjs(prediction.predictedStartDate)
       const predEnd = dayjs(prediction.predictedEndDate)
@@ -214,6 +214,34 @@ export class CycleService {
           }
         }
         d = d.add(1, 'day')
+      }
+    }
+
+    // Mark current/past cycles' ovulation and fertile window using actual cycle start dates.
+    // The prediction engine only computes dates for the *next* cycle, so current-cycle
+    // ovulation wouldn't appear in the calendar without this block.
+    if (cycles.length > 0) {
+      const avgLen = Math.round((prediction as any)?.averageCycleLength ?? 28)
+      const ovulationOffset = avgLen - 14 - 1 // 0-indexed days from cycle start
+
+      for (const cycle of cycles) {
+        const cycleStart = dayjs(cycle.startDate)
+        const cycleOvulation = cycleStart.add(ovulationOffset, 'day')
+        const cycleFertileStart = cycleOvulation.subtract(5, 'day')
+        const cycleFertileEnd = cycleOvulation.add(1, 'day')
+
+        let d = startOfMonth
+        while (d.isBefore(endOfMonth) || d.isSame(endOfMonth, 'day')) {
+          const dateStr = d.format('YYYY-MM-DD')
+          if (!days[dateStr]) {
+            if (d.isSame(cycleOvulation, 'day')) {
+              days[dateStr] = { type: 'ovulation' }
+            } else if (d.isBetween(cycleFertileStart, cycleFertileEnd, 'day', '[]')) {
+              days[dateStr] = { type: 'fertile' }
+            }
+          }
+          d = d.add(1, 'day')
+        }
       }
     }
 
