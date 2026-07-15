@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, Switch, TextInput, Alert,
@@ -11,6 +11,7 @@ import * as StoreReview from 'expo-store-review'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { router, useLocalSearchParams } from 'expo-router'
+import { useFocusEffect } from '@react-navigation/native'
 import { MMKV } from 'react-native-mmkv'
 
 const reviewStorage = new MMKV({ id: 'lunara-review' })
@@ -103,6 +104,14 @@ export default function SymptomsScreen() {
   // Detect existing log and pre-fill
   const existingLog = getLogForDate(targetDate)
   const isEditing = !!existingLog
+
+  // Reset saved flag every time the screen comes into focus so the save
+  // button is always re-enabled when re-opening the same date (tab stays mounted).
+  useFocusEffect(
+    useCallback(() => {
+      setSaved(false)
+    }, [])
+  )
 
   useEffect(() => {
     // Reset all fields to defaults first (handles switching between days)
