@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useMutation } from '@tanstack/react-query'
 import Animated, { FadeInUp } from 'react-native-reanimated'
+import { useRouter } from 'expo-router'
 import dayjs from 'dayjs'
 
 import { useAuthStore, useCycleStore, useSymptomStore } from '@/store'
@@ -81,6 +82,7 @@ export default function AiChatScreen() {
   const [isOffline, setIsOffline] = useState(false)
   const flatListRef = useRef<FlatList>(null)
 
+  const router = useRouter()
   const isPremium = user?.subscription?.isPremium ?? false
   const phase = cycleStore.currentPhase
   const suggestionPrompts = SUGGESTION_PROMPTS_BY_PHASE[phase ?? 'default'] ?? SUGGESTION_PROMPTS_BY_PHASE.default
@@ -140,6 +142,11 @@ export default function AiChatScreen() {
         setMessages((prev) => [...prev, errorMsg])
         return
       }
+
+      // Log error details for debugging
+      const status = error?.response?.status
+      const errMsg = error?.response?.data?.error ?? error?.response?.data?.message ?? error?.message ?? 'desconocido'
+      console.error('[Luna] API error:', status, errMsg, error?.code)
 
       // Backend offline → generar respuesta local con datos reales del usuario
       setIsOffline(true)
@@ -202,6 +209,9 @@ export default function AiChatScreen() {
         colors={[Colors.dark.surface, Colors.dark.bg]}
         style={[styles.header, { paddingTop: insets.top + 8 }]}
       >
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Text style={styles.backIcon}>←</Text>
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>🌙 Luna</Text>
         <Text style={styles.headerSubtitle}>
           {isOffline ? 'Modo offline · Respuestas con tus datos locales' : 'Asistente de salud femenina'}
@@ -288,6 +298,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.dark.border,
+  },
+  backButton: {
+    position: 'absolute',
+    left: Spacing.md,
+    bottom: Spacing.md,
+    padding: 4,
+  },
+  backIcon: {
+    fontSize: 22,
+    color: Colors.dark.text,
   },
   headerTitle: {
     fontSize: Typography.fontSize.xl,
