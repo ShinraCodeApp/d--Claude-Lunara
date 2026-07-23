@@ -45,6 +45,7 @@ jobs:
           cat > apps/mobile/android/gradle.properties << 'EOF'
           org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError
           android.useAndroidX=true
+          android.suppressUnsupportedCompileSdk=36
           android.enableJetifier=true
           android.enablePngCrunchInReleaseBuilds=true
           reactNativeArchitectures=arm64-v8a
