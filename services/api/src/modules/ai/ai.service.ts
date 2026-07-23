@@ -5,6 +5,11 @@ import { env } from '@/config/env'
 const RATE_LIMIT_FREE = 20
 const RATE_LIMIT_PREMIUM = 200
 
+// Groq (primary — free tier, generous quota)
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
+const GROQ_MODEL = 'llama-3.3-70b-versatile'
+
+// Gemini (fallback)
 const GEMINI_MODEL = 'gemini-2.0-flash'
 const GEMINI_URL = (model: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`
@@ -25,6 +30,86 @@ Restricciones importantes:
 - Respuestas concisas y claras (2-4 párrafos máximo)
 - No inventes estadísticas ni información médica`
 
+async function callGroq(
+  systemPrompt: string,
+  messages: Array<{ role: string; content: string }>
+): Promise<string> {
+  const res = await fetch(GROQ_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${env.GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
+      ],
+      max_tokens: 600,
+      temperature: 0.7,
+    }),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    console.error('Groq HTTP error:', res.status, errText)
+    throw new Error(`Groq error ${res.status}`)
+  }
+
+  const data = await res.json() as any
+  return data?.choices?.[0]?.message?.content ?? ''
+}
+
+async function callGemini(
+  systemPrompt: string,
+  messages: Array<{ role: string; content: string }>
+): Promise<string> {
+  const allMsgs = messages.map((m) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }))
+  const firstUserIdx = allMsgs.findIndex((m) => m.role === 'user')
+  const conversation = firstUserIdx >= 0 ? allMsgs.slice(firstUserIdx) : allMsgs
+
+  const contents = [
+    { role: 'user', parts: [{ text: `[Instrucciones del sistema]\n${systemPrompt}` }] },
+    { role: 'model', parts: [{ text: 'Entendido. Soy Luna 🌙, lista para ayudarte.' }] },
+    ...conversation,
+  ]
+
+  const res = await fetch(GEMINI_URL(GEMINI_MODEL), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents,
+      generationConfig: { maxOutputTokens: 600, temperature: 0.7 },
+    }),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    console.error('Gemini HTTP error:', res.status, errText)
+    throw new Error(`Gemini error ${res.status}`)
+  }
+
+  const data = await res.json() as any
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+}
+
+async function callAI(
+  systemPrompt: string,
+  messages: Array<{ role: string; content: string }>
+): Promise<string> {
+  if (env.GROQ_API_KEY) {
+    return callGroq(systemPrompt, messages)
+  }
+  if (env.GEMINI_API_KEY) {
+    return callGemini(systemPrompt, messages)
+  }
+  throw new Error('No AI API key configured')
+}
+
 export class AiService {
   async chat(
     userId: string,
@@ -32,14 +117,13 @@ export class AiService {
     cycleContext?: Record<string, unknown>,
     isPremium = false
   ) {
-    if (!env.GEMINI_API_KEY) {
+    if (!env.GROQ_API_KEY && !env.GEMINI_API_KEY) {
       return {
         content: 'El servicio de IA Luna no está disponible en este momento. Por favor intenta más tarde. 🌙',
         remainingToday: isPremium ? RATE_LIMIT_PREMIUM : RATE_LIMIT_FREE,
       }
     }
 
-    // Rate limiting per user per day (Redis optional — if unavailable, allow the request)
     const limit = isPremium ? RATE_LIMIT_PREMIUM : RATE_LIMIT_FREE
     let count = 1
     try {
@@ -52,7 +136,6 @@ export class AiService {
       }
     } catch (e: any) {
       if (e?.statusCode === 429) throw e
-      // Redis unavailable — allow the request without rate limiting
     }
 
     let systemPrompt = LUNA_SYSTEM_PROMPT
@@ -60,50 +143,14 @@ export class AiService {
       systemPrompt += `\n\nContexto actual de la usuaria: ${cycleContext.user_context}`
     }
 
-    // Build contents array — Gemini v1 REST format
-    // Prepend system prompt as first user+model exchange (compatible with all API versions)
-    const allMsgs = messages.map((m) => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    }))
-    const firstUserIdx = allMsgs.findIndex((m) => m.role === 'user')
-    const conversation = firstUserIdx >= 0 ? allMsgs.slice(firstUserIdx) : allMsgs
-
-    const contents = [
-      { role: 'user', parts: [{ text: `[Instrucciones del sistema]\n${systemPrompt}` }] },
-      { role: 'model', parts: [{ text: 'Entendido. Soy Luna 🌙, lista para ayudarte.' }] },
-      ...conversation,
-    ]
-
     try {
-      const res = await fetch(GEMINI_URL(GEMINI_MODEL), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents,
-          generationConfig: { maxOutputTokens: 600, temperature: 0.7 },
-        }),
-      })
-
-      if (!res.ok) {
-        const errText = await res.text()
-        console.error('Gemini HTTP error:', res.status, errText)
-        return {
-          content: 'Lo siento, hubo un problema al procesar tu mensaje. Por favor intenta de nuevo. 🌙',
-          remainingToday: isPremium ? null : Math.max(0, limit - count),
-        }
-      }
-
-      const data = await res.json() as any
-      const content: string = data?.candidates?.[0]?.content?.parts?.[0]?.text
-        ?? 'Lo siento, no pude procesar tu mensaje. Intenta de nuevo.'
-
+      const content = await callAI(systemPrompt, messages)
       return {
-        content,
+        content: content || 'Lo siento, no pude procesar tu mensaje. Intenta de nuevo.',
         remainingToday: isPremium ? null : Math.max(0, limit - count),
       }
     } catch (err: any) {
-      console.error('Gemini error:', err?.message ?? err)
+      console.error('AI error:', err?.message ?? err)
       return {
         content: 'Lo siento, hubo un problema al procesar tu mensaje. Por favor intenta de nuevo. 🌙',
         remainingToday: isPremium ? null : Math.max(0, limit - count),
@@ -169,7 +216,7 @@ export class AiService {
   }
 
   async analyzePatterns(userId: string) {
-    if (!env.GEMINI_API_KEY) return { insights: [], available: false }
+    if (!env.GROQ_API_KEY && !env.GEMINI_API_KEY) return { insights: [], available: false }
 
     const cycles = await prisma.menstrualCycle.findMany({
       where: { userId },
@@ -191,13 +238,7 @@ export class AiService {
 Datos: ${cycles.length} ciclos, duración promedio ${Math.round(avgLength)} días.`
 
     try {
-      const res = await fetch(GEMINI_URL(GEMINI_MODEL), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] }),
-      })
-      const data = await res.json() as any
-      const raw: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+      const raw = await callAI('Eres un analizador de datos de salud femenina.', [{ role: 'user', content: prompt }])
       const match = raw.match(/\{[\s\S]*\}/)
       if (match) {
         const parsed = JSON.parse(match[0])
@@ -210,7 +251,7 @@ Datos: ${cycles.length} ciclos, duración promedio ${Math.round(avgLength)} día
   }
 
   async generateMonthlyInsight(userId: string, year: number, month: number) {
-    if (!env.GEMINI_API_KEY) return { insight: null, available: false }
+    if (!env.GROQ_API_KEY && !env.GEMINI_API_KEY) return { insight: null, available: false }
 
     const startDate = new Date(year, month - 1, 1)
     const endDate = new Date(year, month, 0)
@@ -227,13 +268,7 @@ Datos: ${cycles.length} ciclos, duración promedio ${Math.round(avgLength)} día
 Datos: ${year}-${month}, ${cycles.length} ciclos, ${symptoms} registros de síntomas, ánimo predominante: ${dominantMood ?? 'no registrado'}, racha: ${streak?.currentStreak ?? 0} días.`
 
     try {
-      const res = await fetch(GEMINI_URL(GEMINI_MODEL), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] }),
-      })
-      const data = await res.json() as any
-      const insight: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+      const insight = await callAI('Eres una asistente de salud femenina empática.', [{ role: 'user', content: prompt }])
       return { insight: insight || null, available: true }
     } catch {
       return { insight: null, available: true }
