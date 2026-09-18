@@ -67,7 +67,8 @@
         }
       ],
       "./plugins/withAndroidWidget.js",
-      "./plugins/withiOSWidget.js"
+      "./plugins/withiOSWidget.js",
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true

@@ -7,4 +7,5 @@ expo-env.d.ts
 
 # Android release keystore — never commit
 android/app/lunara-release.keystore
+android/app/*.keystore
 android/gradle.properties
