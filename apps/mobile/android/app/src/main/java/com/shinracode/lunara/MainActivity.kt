@@ -3,6 +3,8 @@ package com.shinracode.lunara
 import android.os.Build
 import android.os.Bundle
 
+import androidx.activity.enableEdgeToEdge
+
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
@@ -16,6 +18,7 @@ class MainActivity : ReactActivity() {
     // coloring the background, status bar, and navigation bar.
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
+    enableEdgeToEdge()
     super.onCreate(null)
   }
 

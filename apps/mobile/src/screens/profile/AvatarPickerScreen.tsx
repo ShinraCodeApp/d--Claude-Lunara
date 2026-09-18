@@ -56,11 +56,8 @@ export default function AvatarPickerScreen() {
   }
 
   const handlePickPhoto = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (status !== 'granted') {
-      Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería para elegir una foto.')
-      return
-    }
+    // Uses the Android/iOS system photo picker directly — no READ_MEDIA_IMAGES
+    // permission needed or requested, per Google Play's photo picker policy.
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
