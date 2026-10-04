@@ -94,3 +94,7 @@ prisma/dev.db-journal
 terraform.tfstate
 terraform.tfstate.backup
 .terraform/
+
+# logs locales de pruebas en el celular
+logcat*.txt
+install_out.txt
