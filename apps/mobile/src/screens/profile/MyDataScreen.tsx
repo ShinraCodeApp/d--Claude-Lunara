@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: Spacing.md, paddingTop: Spacing.lg, gap: Spacing.lg },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   statCard: {
-    flex: 1, minWidth: '45%', alignItems: 'center', paddingVertical: Spacing.md,
+    width: '48%', alignItems: 'center', paddingVertical: Spacing.md,
     backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: BorderRadius.xl,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
   },

@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
   noData: { fontSize: Typography.fontSize.sm, color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: Spacing.sm },
   wellnessGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   wellnessItem: {
-    flex: 1, minWidth: '45%', backgroundColor: 'rgba(139,92,246,0.12)',
+    width: '48%', backgroundColor: 'rgba(139,92,246,0.12)',
     borderRadius: BorderRadius.xl, padding: Spacing.md, alignItems: 'center', gap: 4,
     borderWidth: 1, borderColor: 'rgba(139,92,246,0.2)',
   },

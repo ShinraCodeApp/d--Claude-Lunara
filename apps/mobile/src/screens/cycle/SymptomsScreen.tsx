@@ -840,9 +840,11 @@ const styles = StyleSheet.create({
   },
   periodToggleDotActive: { backgroundColor: Colors.rose[500], borderColor: Colors.rose[500] },
   periodIntensityRow: { marginTop: Spacing.md },
-  periodIntensityBtns: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap', marginTop: Spacing.sm },
+  // Ancho fijo (48%) en vez de flex:1 + minWidth: con flex el recuadro no crecia
+  // al pasar a 2 filas y los botones quedaban debajo del estado de animo
+  periodIntensityBtns: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: Spacing.sm, marginTop: Spacing.sm },
   periodIntensityBtn: {
-    flex: 1, minWidth: '45%', alignItems: 'center', paddingVertical: Spacing.sm,
+    width: '48%', alignItems: 'center', paddingVertical: Spacing.sm,
     backgroundColor: Colors.dark.card, borderRadius: BorderRadius.lg,
     borderWidth: 1.5, borderColor: Colors.dark.border,
   },

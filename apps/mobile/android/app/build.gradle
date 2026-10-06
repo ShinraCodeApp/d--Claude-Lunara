@@ -116,8 +116,8 @@ android {
         applicationId 'com.shinracode.lunara'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 28
-        versionName "1.3.17"
+        versionCode 29
+        versionName "1.3.18"
         missingDimensionStrategy 'store', 'play'
     }
     signingConfigs {
