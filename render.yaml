@@ -8,7 +8,8 @@ services:
     plan: free
     region: ohio # misma zona que Neon (AWS US East 2)
     rootDir: services/api
-    buildCommand: npm install --include=dev && npm run build
+    # --no-workspaces: instala solo el servidor (sin la app movil ni la web del monorepo)
+    buildCommand: npm install --include=dev --no-workspaces && npm run build
     # crea/actualiza las tablas, carga los datos iniciales y arranca
     startCommand: npx prisma db push && npx prisma db seed && npm start
     healthCheckPath: /api/v1/health
@@ -16,6 +17,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION # Node 24 (el default) es muy nuevo para algunas librerias
+        value: "20"
       - key: DATABASE_URL # Neon: "Connection string" (postgresql://...?sslmode=require)
         sync: false
       - key: REDIS_URL # Upstash: la URL que empieza con rediss://
