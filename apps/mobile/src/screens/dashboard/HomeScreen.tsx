@@ -24,6 +24,7 @@ import { Colors, Typography, Spacing, BorderRadius, Shadows } from '@/theme'
 import QuickLogSheet from '@/components/QuickLogSheet'
 import { updateWidgetFromCycleData } from '@/utils/widgetBridge'
 import { useAppTheme } from '@/context/ThemeContext'
+import MedicalDisclaimer from '@/components/MedicalDisclaimer'
 
 dayjs.extend(relativeTime)
 dayjs.locale('es')
@@ -662,6 +663,7 @@ export default function HomeScreen() {
       )}
 
       <QuickLogSheet visible={quickLogVisible} onClose={() => setQuickLogVisible(false)} />
+      <MedicalDisclaimer />
     </ScrollView>
   )
 }

@@ -7,6 +7,7 @@ import { router } from 'expo-router'
 
 import { useCycleStore } from '@/store'
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
+import MedicalDisclaimer from '@/components/MedicalDisclaimer'
 
 type Phase = 'menstrual' | 'follicular' | 'ovulatory' | 'luteal'
 
@@ -290,6 +291,7 @@ export default function PhaseTipsScreen() {
             ))}
           </Animated.View>
         )}
+        <MedicalDisclaimer />
       </ScrollView>
     </LinearGradient>
   )

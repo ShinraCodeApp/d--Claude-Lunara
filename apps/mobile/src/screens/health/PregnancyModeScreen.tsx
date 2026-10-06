@@ -8,6 +8,7 @@ import dayjs from 'dayjs'
 
 import { useSettingsStore } from '@/store'
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
+import MedicalDisclaimer from '@/components/MedicalDisclaimer'
 
 const DOCTOR_VISITS: { week: number; title: string; desc: string }[] = [
   { week: 8,  title: 'Primera consulta obstétrica', desc: 'Confirmación de embarazo, grupo sanguíneo, ecografía inicial' },
@@ -256,6 +257,7 @@ export default function PregnancyModeScreen() {
           </>
         )}
         <View style={{ height: 40 }} />
+        <MedicalDisclaimer />
       </ScrollView>
     </LinearGradient>
   )

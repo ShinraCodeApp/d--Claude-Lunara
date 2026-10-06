@@ -13,6 +13,7 @@ import apiClient from '@/api/client'
 import { useAuthStore, useSymptomStore } from '@/store'
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
 import { analyzePatterns, computeWellnessSummary, PhasePattern, WellnessSummary } from '@/utils/patternAnalysis'
+import MedicalDisclaimer from '@/components/MedicalDisclaimer'
 
 const { width } = Dimensions.get('window')
 const BAR_MAX_HEIGHT = 80
@@ -414,6 +415,7 @@ function InsightsScreen() {
             )}
           </Animated.View>
         )}
+        <MedicalDisclaimer />
       </ScrollView>
     </LinearGradient>
   )
@@ -586,6 +588,7 @@ function BBTChart({ bbtLogs }: { bbtLogs: Array<{ date: string; bbt: number }> }
             )
           })}
         </View>
+        <MedicalDisclaimer />
       </ScrollView>
     </View>
   )

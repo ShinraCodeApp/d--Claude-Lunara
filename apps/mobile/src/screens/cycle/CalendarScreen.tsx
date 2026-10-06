@@ -18,6 +18,7 @@ import { router } from 'expo-router'
 import { useCalendar } from '@/api/hooks/useCycle'
 import { useSymptomStore } from '@/store'
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '@/theme'
+import MedicalDisclaimer from '@/components/MedicalDisclaimer'
 
 dayjs.extend(weekday)
 dayjs.extend(isBetween)
@@ -352,6 +353,7 @@ export default function CalendarScreen() {
         )}
 
         <View style={{ height: 100 }} />
+        <MedicalDisclaimer />
       </ScrollView>
     </View>
   )

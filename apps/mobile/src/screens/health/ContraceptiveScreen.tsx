@@ -9,6 +9,7 @@ import dayjs from 'dayjs'
 import { useSettingsStore } from '@/store'
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
 import { schedulePillReminder } from '@/utils/notifications'
+import MedicalDisclaimer from '@/components/MedicalDisclaimer'
 
 const METHODS = [
   { key: 'pill', emoji: '💊', label: 'Pastilla diaria', desc: 'Anticonceptivo oral combinado o solo progesterona' },
@@ -184,6 +185,7 @@ export default function ContraceptiveScreen() {
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
+        <MedicalDisclaimer />
       </ScrollView>
     </LinearGradient>
   )
