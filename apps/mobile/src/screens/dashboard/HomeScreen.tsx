@@ -44,7 +44,7 @@ const PHASE_INFO = {
       '🛁 Aplica calor local en el abdomen — reduce cólicos hasta un 40%',
       '🍫 Chocolate negro (70%+) aporta magnesio para aliviar calambres',
       '🐟 Omega-3 del salmón reduce la inflamación menstrual',
-      '💊 Ibuprofeno funciona mejor tomado preventivo, antes del dolor',
+      '🩺 Si los cólicos te limitan, consultá con tu ginecóloga/o: no te automediques',
       '🧘 Yoga restaurativo y posturas de bebé alivian la tensión pélvica',
       '💧 Beber más agua reduce hinchazón y retención de líquidos',
     ],

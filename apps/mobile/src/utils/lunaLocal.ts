@@ -73,7 +73,7 @@ export function generateLocalResponse(
         : `Sobre el dolor menstrual:`,
       '• El calor local (bolsa de agua caliente) puede reducir los cólicos hasta un 40%.',
       '• El magnesio (chocolate oscuro 70%+, espinacas) ayuda a relajar la musculatura.',
-      '• El ibuprofeno funciona mejor si se toma antes de que empiece el dolor.',
+      '• Si necesitás un analgésico, consultá con tu médica/o cuál te conviene y cómo tomarlo.',
       '• Movimiento suave como yoga o caminatas puede aliviar mejor que el reposo total.',
       '',
       '⚕️ Si el dolor es muy intenso o incapacitante, consulta a tu ginecóloga.',
