@@ -138,3 +138,19 @@ for (const screenStackPath of screenStackPaths) {
     }
   }
 }
+
+// Patch: react-native-mmkv 2.x — compilar con páginas de 16 KB (requisito de
+// Google Play desde 2025). Las demás librerías nativas ya salen alineadas; mmkv 2
+// no pasa la opción a CMake y su .so quedaba alineado a 4 KB. (mmkv 3 lo trae,
+// pero exige la Nueva Arquitectura, que Lunara todavía no usa.)
+for (const base of ['../node_modules', '../apps/mobile/node_modules']) {
+  const mmkvGradle = path.join(__dirname, base, 'react-native-mmkv/android/build.gradle')
+  if (!fs.existsSync(mmkvGradle)) continue
+  let content = fs.readFileSync(mmkvGradle, 'utf8')
+  if (content.includes('ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES')) continue
+  const before = 'arguments "-DANDROID_STL=c++_shared"'
+  if (!content.includes(before)) continue
+  content = content.replace(before, 'arguments "-DANDROID_STL=c++_shared", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"')
+  fs.writeFileSync(mmkvGradle, content, 'utf8')
+  console.log('[patch-gradle] Patched react-native-mmkv build.gradle — 16 KB page size')
+}
