@@ -25,7 +25,8 @@ def getRNMinorVersion() {
 
 if (getRNMinorVersion() >= 75) {
   extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
-    if (System.getenv('EXPO_UNSTABLE_CORE_AUTOLINKING') == '1') {
+    // Autolinking de Expo siempre: el CLI de React Native no esta instalado en el monorepo
+    if (System.getenv('EXPO_UNSTABLE_CORE_AUTOLINKING') != '0') {
       println('\u001B[32mUsing expo-modules-autolinking as core autolinking source\u001B[0m')
       def command = [
         'node',

@@ -17,7 +17,7 @@ export class MercadoPagoService {
       ? Number(env.MP_ANNUAL_PRICE ?? 34.99)
       : Number(env.MP_MONTHLY_PRICE ?? 4.99)
     const currency = env.MP_CURRENCY ?? 'ARS'
-    const apiUrl = env.API_URL ?? 'https://d-claude-lunara-production.up.railway.app'
+    const apiUrl = env.API_URL ?? 'https://lunara-api-zwiz.onrender.com'
 
     const pref = await preference.create({
       body: {

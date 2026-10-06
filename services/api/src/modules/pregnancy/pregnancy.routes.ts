@@ -7,11 +7,10 @@ export async function pregnancyRoutes(fastify: FastifyInstance) {
 
   // Activate / update pregnancy mode
   fastify.post('/profile', { preHandler: [authenticate, requirePremium] }, async (req, reply) => {
-    const { lastMenstrualPeriod, dueDate, isHighRisk } = req.body as any
+    const { lastMenstrualPeriod, dueDate } = req.body as any
     const profile = await svc.upsertProfile(req.currentUser!.id, {
       lastMenstrualPeriod: new Date(lastMenstrualPeriod),
       dueDate: dueDate ? new Date(dueDate) : undefined,
-      isHighRisk: isHighRisk ?? false,
     })
     return reply.send(profile)
   })
@@ -25,9 +24,14 @@ export async function pregnancyRoutes(fastify: FastifyInstance) {
 
   // Log weekly note
   fastify.post('/week-log', { preHandler: [authenticate] }, async (req, reply) => {
-    const { weekNumber, weight, symptoms, babyMovements, notes } = req.body as any
+    // La app manda weekNumber; el servicio y la base usan week
+    const { weekNumber, week, weight, symptoms, notes } = req.body as any
+    const weekValue = Number(week ?? weekNumber)
+    if (!Number.isInteger(weekValue) || weekValue < 1 || weekValue > 42) {
+      return reply.code(400).send({ message: 'Semana de embarazo inválida' })
+    }
     const log = await svc.logWeek(req.currentUser!.id, {
-      weekNumber, weight, symptoms, babyMovements, notes,
+      week: weekValue, weight, symptoms, notes,
     })
     return reply.send(log)
   })

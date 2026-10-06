@@ -11,6 +11,7 @@ import { router } from 'expo-router'
 
 import { useSettingsStore } from '@/store'
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
+import MedicalDisclaimer from '@/components/MedicalDisclaimer'
 
 const DATA_POINTS = [
   { icon: '🩸', title: 'Ciclo menstrual', desc: 'Fechas de período, síntomas y patrones de ciclo' },
@@ -126,6 +127,7 @@ export default function PrivacyConsentScreen() {
             Puedes revocar tu consentimiento en cualquier momento desde Perfil → Privacidad y datos.
           </Text>
         </Animated.View>
+        <MedicalDisclaimer />
       </ScrollView>
     </LinearGradient>
   )

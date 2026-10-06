@@ -182,7 +182,15 @@ async function main() {
   })
 
   // ─── Admin user ───────────────────────────────────────────
-  const adminPassword = await bcrypt.hash(process.env.ADMIN_SEED_PASSWORD ?? 'LunaraAdmin2026#Shinra!', 12)
+  // La contraseña llega solo por ADMIN_SEED_PASSWORD (variable del servidor).
+  // Antes había una por defecto escrita acá, y el repositorio es público.
+  const seedPassword = process.env.ADMIN_SEED_PASSWORD
+  if (!seedPassword || seedPassword.length < 12) {
+    console.warn('⚠️  ADMIN_SEED_PASSWORD no definida (mín. 12 caracteres): no se crea ni actualiza el admin.')
+    console.log('\n🌕 Lunara database seeded successfully!')
+    return
+  }
+  const adminPassword = await bcrypt.hash(seedPassword, 12)
   await prisma.user.upsert({
     where: { email: 'admin@lunara.app' },
     update: { passwordHash: adminPassword },

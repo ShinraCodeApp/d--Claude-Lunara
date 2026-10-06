@@ -170,11 +170,17 @@ export async function adminRoutes(app: FastifyInstance) {
       include: {
         profile: true,
         subscription: true,
-        _count: { select: { menstrualCycles: true, symptomLogs: true, aiMessages: true } },
+        _count: { select: { cycles: true, symptoms: true } },
       },
     })
     if (!user) return reply.status(404).send({ error: 'Usuario no encontrado' })
-    return reply.send(user)
+    const aiMessages = await prisma.aiMessage.count({ where: { chat: { userId: id } } })
+    // El panel espera estos nombres (las relaciones en Prisma se llaman cycles/symptoms)
+    const { _count, ...rest } = user
+    return reply.send({
+      ...rest,
+      _count: { menstrualCycles: _count.cycles, symptomLogs: _count.symptoms, aiMessages },
+    })
   })
 
   // PUT /admin/users/:id/subscription — grant or revoke premium
@@ -261,7 +267,10 @@ export async function adminRoutes(app: FastifyInstance) {
       select: { userId: true, fcmToken: true },
     })
 
-    const { default: firebaseAdmin } = await import('@/config/firebase')
+    const { default: firebaseAdmin, isFirebaseReady } = await import('@/config/firebase')
+    if (!isFirebaseReady()) {
+      return reply.status(503).send({ error: 'Notificaciones push no configuradas (faltan credenciales de Firebase)' })
+    }
     const messaging = firebaseAdmin.messaging()
 
     const chunks = []
@@ -331,13 +340,18 @@ export async function adminRoutes(app: FastifyInstance) {
         take: query.limit,
         skip: (query.page - 1) * query.limit,
         include: {
-          author: { select: { id: true, email: true, profile: { select: { firstName: true } } } },
+          user: { select: { id: true, email: true, profile: { select: { firstName: true } } } },
           _count: { select: { reactions: true } },
         },
       }),
       prisma.communityPost.count({ where }),
     ])
-    return reply.send({ posts, total, page: query.page })
+    // El panel muestra post.author (en Prisma la relación se llama user)
+    return reply.send({
+      posts: posts.map(({ user, ...post }) => ({ ...post, author: user })),
+      total,
+      page: query.page,
+    })
   })
 
   // DELETE /admin/community/:postId — delete community post
@@ -486,7 +500,10 @@ export async function adminRoutes(app: FastifyInstance) {
       select: { fcmToken: true },
     })
 
-    const { default: firebaseAdmin } = await import('@/config/firebase')
+    const { default: firebaseAdmin, isFirebaseReady } = await import('@/config/firebase')
+    if (!isFirebaseReady()) {
+      return reply.status(503).send({ error: 'Notificaciones push no configuradas (faltan credenciales de Firebase)' })
+    }
     const messaging = firebaseAdmin.messaging()
     const tokens = devices.map((d) => d.fcmToken!).filter(Boolean)
     if (!tokens.length) return reply.send({ sent: 0, failed: 0, total: 0 })

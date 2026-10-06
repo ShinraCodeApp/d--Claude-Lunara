@@ -20,10 +20,13 @@ import relativeTime from 'dayjs/plugin/relativeTime'
 import { useAuthStore, useCycleStore, useGardenStore, useSettingsStore, useSymptomStore } from '@/store'
 import { AVATARS } from '@/constants/avatars'
 import { useCurrentCycle } from '@/api/hooks/useCycle'
+import apiClient from '@/api/client'
+import { enqueue } from '@/api/syncQueue'
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '@/theme'
 import QuickLogSheet from '@/components/QuickLogSheet'
 import { updateWidgetFromCycleData } from '@/utils/widgetBridge'
 import { useAppTheme } from '@/context/ThemeContext'
+import MedicalDisclaimer from '@/components/MedicalDisclaimer'
 
 dayjs.extend(relativeTime)
 dayjs.locale('es')
@@ -41,7 +44,7 @@ const PHASE_INFO = {
       '🛁 Aplica calor local en el abdomen — reduce cólicos hasta un 40%',
       '🍫 Chocolate negro (70%+) aporta magnesio para aliviar calambres',
       '🐟 Omega-3 del salmón reduce la inflamación menstrual',
-      '💊 Ibuprofeno funciona mejor tomado preventivo, antes del dolor',
+      '🩺 Si los cólicos te limitan, consultá con tu ginecóloga/o: no te automediques',
       '🧘 Yoga restaurativo y posturas de bebé alivian la tensión pélvica',
       '💧 Beber más agua reduce hinchazón y retención de líquidos',
     ],
@@ -118,6 +121,20 @@ export default function HomeScreen() {
       energy: todayLog?.energy ?? null,
       symptoms: todayLog?.symptoms ?? [],
     } as any)
+    // Avisar al servidor (antes solo quedaba en el celular y las predicciones no
+    // se actualizaban). Si es un período nuevo creamos el ciclo; si ya estaba en
+    // período, registramos el sangrado del día. Sin conexión → cola.
+    const apiIntensity = ({ spotting: 'SPOTTING', light: 'LIGHT', medium: 'MEDIUM', heavy: 'HEAVY' } as Record<string, string>)[intensity] ?? 'MEDIUM'
+    if (cycleStore.isInPeriod && cycleStore.currentCycleId) {
+      enqueue('post', `/cycles/${cycleStore.currentCycleId}/bleeding`, { date: today, intensity: apiIntensity })
+    } else {
+      apiClient.post('/cycles', { startDate: today })
+        .then((r) => {
+          if (r?.data?.id) cycleStore.setCurrentCycle({ currentCycleId: r.data.id })
+          refetch()
+        })
+        .catch(() => enqueue('post', '/cycles', { startDate: today }))
+    }
     cycleStore.setCurrentCycle({ currentPhase: 'menstrual', isInPeriod: true })
     setPeriodStarted(true)
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
@@ -662,6 +679,7 @@ export default function HomeScreen() {
       )}
 
       <QuickLogSheet visible={quickLogVisible} onClose={() => setQuickLogVisible(false)} />
+      <MedicalDisclaimer />
     </ScrollView>
   )
 }

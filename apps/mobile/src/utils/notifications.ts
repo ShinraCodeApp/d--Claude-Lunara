@@ -69,6 +69,27 @@ export async function scheduleDailyLogReminder(hour = 20, minute = 0) {
   })
 }
 
+// Aviso de atraso: 5 días después de la fecha estimada. Si la usuaria registra
+// el período antes, la fecha estimada cambia y este aviso se reprograma.
+export async function schedulePeriodLateReminder(nextPeriodDate: string) {
+  await Notifications.cancelScheduledNotificationAsync('period-late').catch(() => {})
+  const date = new Date(nextPeriodDate)
+  date.setDate(date.getDate() + 5)
+  date.setHours(10, 0, 0, 0)
+  if (date <= new Date()) return
+
+  await Notifications.scheduleNotificationAsync({
+    identifier: 'period-late',
+    content: {
+      title: '🗓️ ¿Ya llegó tu período?',
+      body: 'Según la estimación, lleva unos días de atraso. Si ya llegó, regístralo. Los atrasos pueden ser normales; si te preocupa o podrías estar embarazada, consultá con tu médica/o.',
+      data: { screen: '/(tabs)' },
+      categoryIdentifier: 'QUICK_LOG',
+    },
+    trigger: { date, channelId: 'lunara-cycle' } as Notifications.DateTriggerInput,
+  })
+}
+
 export async function schedulePeriodReminder(nextPeriodDate: string) {
   await Notifications.cancelScheduledNotificationAsync('period-soon').catch(() => {})
   const date = new Date(nextPeriodDate)
@@ -134,8 +155,8 @@ export async function scheduleFertileReminder(fertileStart: string) {
   await Notifications.scheduleNotificationAsync({
     identifier: 'fertile-window',
     content: {
-      title: '🌸 Comienza tu ventana fértil',
-      body: 'Estos son tus días de mayor probabilidad de concepción. Tu energía está subiendo.',
+      title: '🌸 Comienza tu ventana fértil (estimada)',
+      body: 'Según tu historial, serían tus días más fértiles. Es una estimación: no la uses como método anticonceptivo.',
       data: { screen: '/(tabs)' },
       categoryIdentifier: 'QUICK_LOG',
     },
@@ -191,7 +212,7 @@ export async function scheduleOvulationReminder(ovulationDate: string) {
   await Notifications.scheduleNotificationAsync({
     identifier: 'ovulation',
     content: {
-      title: '🥚 Mañana es tu día de ovulación',
+      title: '🥚 Mañana sería tu día de ovulación',
       body: 'Tu pico de fertilidad se acerca. Registra tu temperatura basal y flujo cervical.',
       data: { screen: '/(tabs)/log' },
       categoryIdentifier: 'QUICK_LOG',
@@ -209,7 +230,7 @@ export async function scheduleOvulationDayNotification(ovulationDate: string) {
   await Notifications.scheduleNotificationAsync({
     identifier: 'ovulation-today',
     content: {
-      title: '🌕 Hoy es tu día más fértil',
+      title: '🌕 Hoy sería tu día más fértil',
       body: '¡Tu pico de fertilidad y energía! Es tu mejor día para casi todo. Registra cómo te sientes.',
       data: { screen: '/(tabs)/log' },
       categoryIdentifier: 'QUICK_LOG',
@@ -222,7 +243,7 @@ export async function cancelAllLunaraNotifications() {
   const ids = [
     'daily-log', 'period-soon', 'period-1day', 'period-today',
     'fertile-window', 'pill-reminder', 'water-reminder',
-    'ovulation', 'ovulation-today',
+    'ovulation', 'ovulation-today', 'period-late',
     'phase-transition', 'energy-warning', 'mood-heads-up',
   ]
   await Promise.all(ids.map((id) => Notifications.cancelScheduledNotificationAsync(id).catch(() => {})))
@@ -231,7 +252,7 @@ export async function cancelAllLunaraNotifications() {
 // ─── Predictive notifications ─────────────────────────────────
 
 const PHASE_TRANSITION_MSGS: Record<string, { title: string; body: string }> = {
-  menstrual:  { title: '🌑 Tu período comenzará mañana', body: 'Prepara lo que necesitas: calor local, ibuprofeno, snacks favoritos. Tu cuerpo trabaja duro.' },
+  menstrual:  { title: '🌑 Tu período comenzará mañana', body: 'Prepara lo que necesitas: calor local, descanso y tus snacks favoritos. Tu cuerpo trabaja duro.' },
   follicular: { title: '🌒 Entrando a fase folicular', body: 'Tu energía irá subiendo los próximos días. Buen momento para proyectos y planes nuevos.' },
   ovulatory:  { title: '🌕 Mañana es tu día de ovulación', body: 'Tu pico de fertilidad se acerca. Registra tu temperatura basal y flujo cervical.' },
   luteal:     { title: '🌗 Empieza tu fase lútea', body: 'Es normal sentirse más introspectiva. Prioriza el descanso y la nutrición estos días.' },
@@ -320,6 +341,7 @@ export async function scheduleAllCycleNotifications(opts: {
   else await Notifications.cancelScheduledNotificationAsync('water-reminder').catch(() => {})
 
   if (opts.nextPeriodDate) {
+    await schedulePeriodLateReminder(opts.nextPeriodDate)
     await schedulePeriodReminder(opts.nextPeriodDate)
     await schedulePeriodOneDayReminder(opts.nextPeriodDate)
     await schedulePeriodDayNotification(opts.nextPeriodDate)

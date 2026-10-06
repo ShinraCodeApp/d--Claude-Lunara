@@ -118,3 +118,23 @@ if (fs.existsSync(expoPrintPath)) {
     console.log('[patch-gradle] Patched expo-print build.gradle — fixed components.release')
   }
 }
+
+// Patch 5: react-native-screens ScreenStack.kt — Kotlin removeLast() collides with Android 15 (API 35) List.removeLast()
+// Patched in both the hoisted root node_modules and the nested apps/mobile copy (the one Gradle actually compiles).
+const screenStackPaths = [
+  path.join(__dirname, '../node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStack.kt'),
+  path.join(__dirname, '../apps/mobile/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStack.kt'),
+]
+for (const screenStackPath of screenStackPaths) {
+  if (fs.existsSync(screenStackPath)) {
+    let content = fs.readFileSync(screenStackPath, 'utf8')
+    if (content.includes('drawingOpPool.removeLast()')) {
+      content = content.replace(
+        'drawingOpPool.removeLast()',
+        'drawingOpPool.removeAt(drawingOpPool.lastIndex)'
+      )
+      fs.writeFileSync(screenStackPath, content, 'utf8')
+      console.log(`[patch-gradle] Patched ${screenStackPath} — removeLast() -> removeAt(lastIndex) for Android 15 compat`)
+    }
+  }
+}

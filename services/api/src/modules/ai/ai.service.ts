@@ -9,10 +9,21 @@ const RATE_LIMIT_PREMIUM = 200
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 const GROQ_MODEL = 'llama-3.3-70b-versatile'
 
-// Gemini (fallback)
-const GEMINI_MODEL = 'gemini-2.0-flash'
+// Gemini (respaldo, plan gratis). Se prueban en orden: si uno está saturado o
+// retirado (como gemini-2.0-flash), pasa al siguiente.
+const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-latest']
 const GEMINI_URL = (model: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`
+
+// Reglas que van en TODOS los prompts de salud (política de salud de Google Play).
+export const MEDICAL_RULES = `Reglas de seguridad (obligatorias):
+- Lunara es informativa: nunca diagnostiques enfermedades ni confirmes que la usuaria "tiene" algo.
+- Nunca indiques medicamentos, marcas, dosis, suplementos con dosis ni cambios de tratamiento; eso lo decide una profesional de la salud.
+- Las predicciones del ciclo son estimaciones: nunca las presentes como método anticonceptivo ni como garantía de embarazo o no embarazo.
+- Ante síntomas preocupantes, persistentes o que cambian, recomienda consultar a una médica/o o ginecóloga/o.
+- Señales de alarma → indica ir a una guardia/urgencias o llamar al número de emergencias: sangrado que empapa una toalla por hora o con mareos/desmayo, dolor pélvico o abdominal intenso y repentino, fiebre alta con dolor pélvico, sangrado o dolor fuerte durante un embarazo, dolor de pecho o falta de aire.
+- Si la usuaria menciona querer hacerse daño o quitarse la vida, responde con calidez, anímala a pedir ayuda ya mismo a alguien de confianza y a una línea de ayuda o al número de emergencias de su país (en Argentina: 135 o 0800-345-1435).
+- No inventes estadísticas, estudios ni información médica; si no sabes algo, dilo.`
 
 const LUNA_SYSTEM_PROMPT = `Eres Luna 🌙, la asistente de salud femenina de Lunara. Eres empática, cálida y científicamente precisa.
 
@@ -20,15 +31,11 @@ Tu rol:
 - Ayudar a las usuarias a entender su ciclo menstrual, síntomas, fertilidad y bienestar hormonal
 - Responder preguntas sobre salud reproductiva, PMS, ovulación, anticoncepción, menopausia y más
 - Personalizar tus respuestas según el contexto del ciclo cuando esté disponible
-- Hablar siempre en español, con un tono cercano, profesional y libre de juicios
+- Responder en el mismo idioma en que te escribe la usuaria (español, inglés o portugués), con un tono cercano, profesional y libre de juicios
 - Usar emojis con moderación para hacer la conversación más cálida
-
-Restricciones importantes:
-- Nunca diagnostiques enfermedades ni prescribas medicamentos específicos
-- Recomienda consultar con un médico ante síntomas preocupantes o persistentes
-- Sé honesta cuando no tengas certeza sobre algo
 - Respuestas concisas y claras (2-4 párrafos máximo)
-- No inventes estadísticas ni información médica`
+
+${MEDICAL_RULES}`
 
 async function callGroq(
   systemPrompt: string,
@@ -78,36 +85,52 @@ async function callGemini(
     ...conversation,
   ]
 
-  const res = await fetch(GEMINI_URL(GEMINI_MODEL), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents,
-      generationConfig: { maxOutputTokens: 600, temperature: 0.7 },
-    }),
-  })
+  let lastError: unknown = new Error('Gemini sin modelos')
+  for (const model of GEMINI_MODELS) {
+    const res = await fetch(GEMINI_URL(model), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents,
+        generationConfig: { maxOutputTokens: 600, temperature: 0.7 },
+      }),
+    })
 
-  if (!res.ok) {
-    const errText = await res.text()
-    console.error('Gemini HTTP error:', res.status, errText)
-    throw new Error(`Gemini error ${res.status}`)
+    if (!res.ok) {
+      const errText = await res.text()
+      console.error(`Gemini ${model} HTTP error:`, res.status, errText.slice(0, 300))
+      lastError = new Error(`Gemini error ${res.status}`)
+      continue
+    }
+
+    const data = await res.json() as any
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+    if (text) return text
   }
-
-  const data = await res.json() as any
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+  throw lastError
 }
 
+// Groq primero y Gemini de respaldo: si una IA gratis está saturada o caída,
+// responde la otra.
 async function callAI(
   systemPrompt: string,
   messages: Array<{ role: string; content: string }>
 ): Promise<string> {
-  if (env.GROQ_API_KEY) {
-    return callGroq(systemPrompt, messages)
+  const providers: Array<() => Promise<string>> = []
+  if (env.GROQ_API_KEY) providers.push(() => callGroq(systemPrompt, messages))
+  if (env.GEMINI_API_KEY) providers.push(() => callGemini(systemPrompt, messages))
+  if (!providers.length) throw new Error('No AI API key configured')
+
+  let lastError: unknown
+  for (const provider of providers) {
+    try {
+      const text = await provider()
+      if (text) return text
+    } catch (err) {
+      lastError = err
+    }
   }
-  if (env.GEMINI_API_KEY) {
-    return callGemini(systemPrompt, messages)
-  }
-  throw new Error('No AI API key configured')
+  throw lastError ?? new Error('Respuesta vacía de la IA')
 }
 
 export class AiService {
@@ -238,7 +261,9 @@ export class AiService {
 Datos: ${cycles.length} ciclos, duración promedio ${Math.round(avgLength)} días.`
 
     try {
-      const raw = await callAI('Eres un analizador de datos de salud femenina.', [{ role: 'user', content: prompt }])
+      const raw = await callAI(`Eres un analizador de datos de salud femenina.
+
+${MEDICAL_RULES}`, [{ role: 'user', content: prompt }])
       const match = raw.match(/\{[\s\S]*\}/)
       if (match) {
         const parsed = JSON.parse(match[0])
@@ -268,7 +293,9 @@ Datos: ${cycles.length} ciclos, duración promedio ${Math.round(avgLength)} día
 Datos: ${year}-${month}, ${cycles.length} ciclos, ${symptoms} registros de síntomas, ánimo predominante: ${dominantMood ?? 'no registrado'}, racha: ${streak?.currentStreak ?? 0} días.`
 
     try {
-      const insight = await callAI('Eres una asistente de salud femenina empática.', [{ role: 'user', content: prompt }])
+      const insight = await callAI(`Eres una asistente de salud femenina empática.
+
+${MEDICAL_RULES}`, [{ role: 'user', content: prompt }])
       return { insight: insight || null, available: true }
     } catch {
       return { insight: null, available: true }

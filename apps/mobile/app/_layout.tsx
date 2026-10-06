@@ -15,6 +15,7 @@ import * as Notifications from 'expo-notifications'
 import { useAuthStore, useSettingsStore, useCycleStore, useGardenStore, useSymptomStore } from '@/store'
 import { requestNotificationPermissions, scheduleAllCycleNotifications, registerNotificationCategories } from '@/utils/notifications'
 import { updateHomeWidget } from '@/utils/widget'
+import { startSyncQueue } from '@/api/syncQueue'
 import PinLockScreen from '@/screens/security/PinLockScreen'
 import PrivacyConsentScreen from '@/screens/legal/PrivacyConsentScreen'
 import '@/i18n'
@@ -147,6 +148,11 @@ function RootLayoutNav() {
   useEffect(() => {
     registerNotificationCategories()
   }, [])
+
+  // Manda los registros que quedaron pendientes sin conexión
+  useEffect(() => {
+    if (isAuthenticated) startSyncQueue()
+  }, [isAuthenticated])
 
   useEffect(() => {
     if (!isAuthenticated) return

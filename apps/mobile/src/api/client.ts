@@ -6,9 +6,13 @@ const storage = new MMKV({ id: 'lunara-store' })
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1'
 
+// El servidor (Render gratis) se duerme sin uso y tarda ~1 minuto en despertar:
+// lo despertamos apenas abre la app, así está listo cuando la usuaria inicia sesión.
+fetch(`${BASE_URL}/health`).catch(() => null)
+
 export const apiClient = axios.create({
   baseURL: BASE_URL,
-  timeout: 30000,
+  timeout: 90000,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',

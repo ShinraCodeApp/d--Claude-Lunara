@@ -11,6 +11,7 @@ import dayjs from 'dayjs'
 import { useCycleStore } from '@/store'
 
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
+import MedicalDisclaimer from '@/components/MedicalDisclaimer'
 
 // ─── Types ─────────────────────────────────────────────────────
 type ProviderKey = 'google_fit' | 'native_sensor'
@@ -286,6 +287,7 @@ export default function HealthConnectScreen() {
             </Text>
           </View>
         </Animated.View>
+        <MedicalDisclaimer />
       </ScrollView>
     </LinearGradient>
   )

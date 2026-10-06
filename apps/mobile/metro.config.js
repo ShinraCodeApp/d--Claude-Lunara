@@ -30,9 +30,10 @@ config.resolver.nodeModulesPaths = [
 // is hoisted to the root node_modules.
 const originalResolveRequest = config.resolver.resolveRequest
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (moduleName === './node_modules/expo-router/entry') {
+  if (/expo-router\/entry(\.js)?$/.test(moduleName) && moduleName.startsWith('.')) {
     return {
-      filePath: path.resolve(monorepoRoot, 'node_modules/expo-router/entry.js'),
+      // yarn puede dejar expo-router en la raiz o en apps/mobile: lo buscamos
+      filePath: require.resolve('expo-router/entry.js', { paths: [projectRoot] }),
       type: 'sourceFile',
     }
   }

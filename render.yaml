@@ -1,0 +1,39 @@
+# Render (plan gratis): New → Blueprint → este repo. Reemplaza al servicio de
+# Railway, que dejó de existir. Base de datos: Neon (gratis). Redis: Upstash
+# (gratis). Las claves se cargan a mano en el panel de Render (sync: false).
+services:
+  - type: web
+    name: lunara-api
+    runtime: node
+    plan: free
+    region: ohio # misma zona que Neon (AWS US East 2)
+    rootDir: services/api
+    # --no-workspaces: instala solo el servidor (sin la app movil ni la web del monorepo)
+    buildCommand: npm install --include=dev --no-workspaces && npm run build
+    # crea/actualiza las tablas, carga los datos iniciales y arranca
+    startCommand: npx prisma db push && npx prisma db seed && npm start
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION # Node 24 (el default) es muy nuevo para algunas librerias
+        value: "20"
+      - key: DATABASE_URL # Neon: "Connection string" (postgresql://...?sslmode=require)
+        sync: false
+      - key: REDIS_URL # Upstash: la URL que empieza con rediss://
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: GEMINI_API_KEY # la misma clave gratis de Chef AI / BiodesCode
+        sync: false
+      - key: GROQ_API_KEY # la misma clave gratis gsk_...
+        sync: false
+      - key: ADMIN_SEED_PASSWORD # contraseña del admin admin@lunara.app (mín. 12)
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: "*"

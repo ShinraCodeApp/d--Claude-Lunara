@@ -58,6 +58,20 @@ export class CycleService {
   }
 
   async startCycle(userId: string, data: { startDate: string; notes?: string }) {
+    // Si ya existe un ciclo que empieza ese día (reintento sin conexión o doble
+    // toque), devolvemos ese en vez de crear otro y cerrar el anterior mal.
+    const sameDay = await prisma.menstrualCycle.findFirst({
+      where: {
+        userId,
+        startDate: {
+          gte: dayjs(data.startDate).startOf('day').toDate(),
+          lte: dayjs(data.startDate).endOf('day').toDate(),
+        },
+      },
+      include: { bleedingDays: { orderBy: { date: 'asc' } } },
+    })
+    if (sameDay) return sameDay
+
     // Close any open cycles
     await prisma.menstrualCycle.updateMany({
       where: { userId, endDate: null },

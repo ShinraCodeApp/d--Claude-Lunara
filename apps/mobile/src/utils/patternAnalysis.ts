@@ -134,7 +134,7 @@ export function analyzePatterns(logs: SymptomEntry[]): PhasePattern[] {
       }
 
       if (phase === 'luteal' && topSymptoms.includes('colicos')) {
-        insights.push('Tus cólicos suelen comenzar en la fase lútea — considera calor local o ibuprofeno preventivo.')
+        insights.push('Tus cólicos suelen comenzar en la fase lútea — el calor local ayuda; si te molestan mucho, comentáselo a tu ginecóloga/o.')
       }
 
       if (phase === 'follicular' && topEnergy === 'alta') {

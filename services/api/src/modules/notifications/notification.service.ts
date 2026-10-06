@@ -1,21 +1,5 @@
 import { prisma } from '@/config/database'
-import admin from 'firebase-admin'
-import { env } from '@/config/env'
-
-// Initialize Firebase Admin — wrapped in try/catch so a bad key doesn't crash the server
-if (!admin.apps.length && env.FIREBASE_PROJECT_ID) {
-  try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: env.FIREBASE_PROJECT_ID,
-        clientEmail: env.FIREBASE_CLIENT_EMAIL,
-        privateKey: env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      }),
-    })
-  } catch (err) {
-    console.error('[Firebase] Admin init failed — push notifications disabled:', err)
-  }
-}
+import admin from '@/config/firebase'
 
 export class NotificationService {
   async registerDevice(userId: string, data: {

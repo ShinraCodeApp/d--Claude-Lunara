@@ -44,7 +44,7 @@ const ARTICLES: Article[] = [
       },
       {
         heading: 'Qué ayuda de verdad',
-        body: '• Calor local (bolsa de agua caliente) alivia los cólicos\n• Ibuprofeno funciona mejor que paracetamol porque actúa sobre las prostaglandinas\n• Movimiento suave como yoga o caminar puede reducir el dolor\n• Hierro (espinaca, legumbres) para compensar el sangrado',
+        body: '• Calor local (bolsa de agua caliente) alivia los cólicos\n• Si el dolor no cede, consultá con tu médica/o qué analgésico es adecuado para vos (no te automediques)\n• Movimiento suave como yoga o caminar puede reducir el dolor\n• Hierro (espinaca, legumbres) para compensar el sangrado',
       },
       {
         heading: 'Señales de alerta',

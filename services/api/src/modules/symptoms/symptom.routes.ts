@@ -22,15 +22,31 @@ export async function symptomRoutes(app: FastifyInstance) {
   app.post('/log', async (req, reply) => {
     const body = z.object({
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      symptomId: z.string().uuid(),
+      // Los síntomas del seed usan ids legibles ("cramps"), no UUID
+      symptomId: z.string().min(1).max(64),
       intensity: z.enum(['MILD', 'MODERATE', 'SEVERE']),
       notes: z.string().max(200).optional(),
     }).parse(req.body)
 
+    // Un registro por síntoma y día: si la app reintenta (sin conexión) o la
+    // usuaria guarda dos veces, se actualiza en vez de duplicarse.
+    const date = new Date(body.date)
+    const existing = await prisma.symptomLog.findFirst({
+      where: { userId: req.currentUser.id, date, symptomId: body.symptomId },
+    })
+    if (existing) {
+      const log = await prisma.symptomLog.update({
+        where: { id: existing.id },
+        data: { intensity: body.intensity, notes: body.notes },
+        include: { symptom: true },
+      })
+      return reply.send(log)
+    }
+
     const log = await prisma.symptomLog.create({
       data: {
         userId: req.currentUser.id,
-        date: new Date(body.date),
+        date,
         symptomId: body.symptomId,
         intensity: body.intensity,
         notes: body.notes,

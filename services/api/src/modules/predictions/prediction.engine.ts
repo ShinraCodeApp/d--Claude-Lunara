@@ -35,12 +35,13 @@ export class PredictionEngine {
   private static readonly DEFAULT_PERIOD_LENGTH = 5
   private static readonly LUTEAL_PHASE_LENGTH = 14 // relatively constant
 
-  static predict(cycles: CycleData[], defaultPeriodLength = 5): PredictionResult {
+  static predict(cycles: CycleData[], defaultPeriodLength = 5, now: Date = new Date()): PredictionResult {
     const validCycles = this.filterValidCycles(cycles)
     const cyclesToAnalyze = validCycles.slice(0, this.MAX_CYCLES_ANALYZED)
+    const today = dayjs(now).startOf('day')
 
     if (cyclesToAnalyze.length === 0) {
-      return this.defaultPrediction(defaultPeriodLength)
+      return this.defaultPrediction(defaultPeriodLength, today)
     }
 
     const cycleLengths = this.calculateCycleLengths(cyclesToAnalyze)
@@ -49,19 +50,32 @@ export class PredictionEngine {
     const confidence = this.calculateConfidence(cyclesToAnalyze.length, irregularityScore)
 
     const lastCycle = cyclesToAnalyze[0]
-    const lastStart = dayjs(lastCycle.startDate)
+    const cycleLength = Math.round(averageCycleLength)
 
-    const predictedStart = lastStart.add(Math.round(averageCycleLength), 'day')
+    // Ciclo en curso: si la usuaria no registró períodos, avanzamos de a un ciclo
+    // promedio hasta el que contiene hoy (si no, la predicción quedaría en el pasado).
+    let currentStart = dayjs(lastCycle.startDate).startOf('day')
+    while (!currentStart.add(cycleLength, 'day').isAfter(today)) {
+      currentStart = currentStart.add(cycleLength, 'day')
+    }
+
+    const predictedStart = currentStart.add(cycleLength, 'day')
     const predictedEnd = predictedStart.add(defaultPeriodLength - 1, 'day')
 
-    // Ovulation: cycle length - luteal phase (relatively constant at 14 days)
-    const ovulationDay = Math.round(averageCycleLength) - this.LUTEAL_PHASE_LENGTH
-    const ovulationDate = predictedStart.add(ovulationDay - 1, 'day')
+    // Ovulación: largo del ciclo - fase lútea (~14 días, bastante constante).
+    // Es la del ciclo EN CURSO; si ya pasó, la del próximo ciclo.
+    const ovulationDay = cycleLength - this.LUTEAL_PHASE_LENGTH
+    let ovulationCycleStart = currentStart
+    let ovulationDate = currentStart.add(ovulationDay - 1, 'day')
+    if (ovulationDate.isBefore(today)) {
+      ovulationCycleStart = predictedStart
+      ovulationDate = predictedStart.add(ovulationDay - 1, 'day')
+    }
     const fertilityWindowStart = ovulationDate.subtract(5, 'day')
     const fertilityWindowEnd = ovulationDate.add(1, 'day')
 
     const dailyFertilityScores = this.generateDailyScores(
-      predictedStart.toDate(),
+      ovulationCycleStart.toDate(),
       averageCycleLength,
       defaultPeriodLength,
       ovulationDay
@@ -173,8 +187,7 @@ export class PredictionEngine {
     return 0
   }
 
-  private static defaultPrediction(periodLength: number): PredictionResult {
-    const today = dayjs()
+  private static defaultPrediction(periodLength: number, today = dayjs().startOf('day')): PredictionResult {
     const predictedStart = today.add(this.DEFAULT_CYCLE_LENGTH, 'day')
     const ovulationDay = this.DEFAULT_CYCLE_LENGTH - this.LUTEAL_PHASE_LENGTH
 

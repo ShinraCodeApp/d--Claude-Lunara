@@ -9,8 +9,8 @@ export async function partnerRoutes(fastify: FastifyInstance) {
 
   // Send partner invite
   fastify.post('/invite', { preHandler: [authenticate] }, async (req, reply) => {
-    const { partnerEmail } = req.body as { partnerEmail: string }
-    const link = await svc.createInvite(req.currentUser!.id, partnerEmail)
+    // El vínculo es por código (no hace falta el email de la pareja)
+    const link = await svc.createInvite(req.currentUser!.id)
     return reply.send({ inviteCode: link.inviteCode, expiresAt: link.expiresAt })
   })
 
