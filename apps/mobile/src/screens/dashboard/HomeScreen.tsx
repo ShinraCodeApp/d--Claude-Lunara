@@ -20,6 +20,8 @@ import relativeTime from 'dayjs/plugin/relativeTime'
 import { useAuthStore, useCycleStore, useGardenStore, useSettingsStore, useSymptomStore } from '@/store'
 import { AVATARS } from '@/constants/avatars'
 import { useCurrentCycle } from '@/api/hooks/useCycle'
+import apiClient from '@/api/client'
+import { enqueue } from '@/api/syncQueue'
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '@/theme'
 import QuickLogSheet from '@/components/QuickLogSheet'
 import { updateWidgetFromCycleData } from '@/utils/widgetBridge'
@@ -119,6 +121,20 @@ export default function HomeScreen() {
       energy: todayLog?.energy ?? null,
       symptoms: todayLog?.symptoms ?? [],
     } as any)
+    // Avisar al servidor (antes solo quedaba en el celular y las predicciones no
+    // se actualizaban). Si es un período nuevo creamos el ciclo; si ya estaba en
+    // período, registramos el sangrado del día. Sin conexión → cola.
+    const apiIntensity = ({ spotting: 'SPOTTING', light: 'LIGHT', medium: 'MEDIUM', heavy: 'HEAVY' } as Record<string, string>)[intensity] ?? 'MEDIUM'
+    if (cycleStore.isInPeriod && cycleStore.currentCycleId) {
+      enqueue('post', `/cycles/${cycleStore.currentCycleId}/bleeding`, { date: today, intensity: apiIntensity })
+    } else {
+      apiClient.post('/cycles', { startDate: today })
+        .then((r) => {
+          if (r?.data?.id) cycleStore.setCurrentCycle({ currentCycleId: r.data.id })
+          refetch()
+        })
+        .catch(() => enqueue('post', '/cycles', { startDate: today }))
+    }
     cycleStore.setCurrentCycle({ currentPhase: 'menstrual', isInPeriod: true })
     setPeriodStarted(true)
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)

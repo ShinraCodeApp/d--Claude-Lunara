@@ -17,6 +17,7 @@ import { MMKV } from 'react-native-mmkv'
 const reviewStorage = new MMKV({ id: 'lunara-review' })
 
 import apiClient from '@/api/client'
+import { enqueue } from '@/api/syncQueue'
 import { useSettingsStore, useSymptomStore, useCycleStore, useGardenStore } from '@/store'
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '@/theme'
 
@@ -218,43 +219,30 @@ export default function SymptomsScreen() {
         flowIntensity: isPeriod ? periodIntensity : null,
       })
 
-      // Sync with API in background (don't block save on network)
-      const timeout = (ms: number) => new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
-      const withTimeout = (p: Promise<any>) => Promise.race([p, timeout(8000)]).catch(() => null)
-
-      const promises: Promise<any>[] = []
-
-      // Sync period/cycle data to API so calendar shows colors
+      // Enviar al servidor en segundo plano. Si no hay conexión (o el servidor
+      // está despertando), la cola lo reintenta después: no se pierde nada.
       if (isPeriod) {
         const intensityMap: Record<string, string> = {
           spotting: 'SPOTTING', light: 'LIGHT', medium: 'MEDIUM', heavy: 'HEAVY',
         }
         const apiIntensity = intensityMap[periodIntensity] ?? 'MEDIUM'
         if (currentCycleId) {
-          promises.push(
-            withTimeout(
-              apiClient.post(`/cycles/${currentCycleId}/bleeding`, { date: targetDate, intensity: apiIntensity })
-            )
-          )
+          enqueue('post', `/cycles/${currentCycleId}/bleeding`, { date: targetDate, intensity: apiIntensity })
         } else {
-          promises.push(
-            withTimeout(
-              apiClient.post('/cycles', { startDate: targetDate })
-                .then((r) => { if (r?.data?.id) setCurrentCycle({ currentCycleId: r.data.id, isInPeriod: true, currentPhase: 'menstrual' }) })
-            )
-          )
+          // Intentamos directo para conocer el id del ciclo; si falla, a la cola
+          apiClient.post('/cycles', { startDate: targetDate })
+            .then((r) => { if (r?.data?.id) setCurrentCycle({ currentCycleId: r.data.id, isInPeriod: true, currentPhase: 'menstrual' }) })
+            .catch(() => enqueue('post', '/cycles', { startDate: targetDate }))
         }
       }
 
       if (selectedMood) {
-        promises.push(withTimeout(apiClient.post('/symptoms/mood', { date: targetDate, mood: selectedMood, intensity: moodIntensity, notes })))
+        enqueue('post', '/symptoms/mood', { date: targetDate, mood: selectedMood, intensity: moodIntensity, notes })
       }
       for (const [symptomId, intensity] of Object.entries(selectedSymptoms)) {
-        promises.push(withTimeout(apiClient.post('/symptoms/log', { date: targetDate, symptomId, intensity })))
+        enqueue('post', '/symptoms/log', { date: targetDate, symptomId, intensity })
       }
-      promises.push(withTimeout(apiClient.post('/symptoms/daily-log', { date: targetDate, energyLevel, sleepHours: parseFloat(sleepHours), sleepQuality, notes })))
-
-      Promise.allSettled(promises) // fire and forget
+      enqueue('post', '/symptoms/daily-log', { date: targetDate, energyLevel, sleepHours: parseFloat(sleepHours), sleepQuality, notes })
     },
     onSuccess: async () => {
       if (isNewLog && isToday) {
