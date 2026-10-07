@@ -148,8 +148,27 @@ export default function MyDataScreen() {
                   onPress: async () => {
                     setDeleting(true)
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
-                    await new Promise((r) => setTimeout(r, 1500))
+                    try {
+                      // Antes solo cerraba la sesión y la cuenta seguía en el servidor.
+                      // Se desactiva ya y se borra definitivamente a los 30 días.
+                      await apiClient.delete('/users/account', {
+                        data: { confirmation: 'ELIMINAR MI CUENTA' },
+                      })
+                    } catch {
+                      setDeleting(false)
+                      Alert.alert(
+                        'No se pudo eliminar',
+                        'Revisá tu conexión e intentá de nuevo. Si sigue fallando, escribinos a yamilrueda88@gmail.com.',
+                      )
+                      return
+                    }
+                    // Borrar también lo guardado en este celular
+                    useSymptomStore.setState({ logs: [] })
                     logout()
+                    Alert.alert(
+                      'Cuenta eliminada',
+                      'Tu cuenta quedó desactivada y tus datos se borran definitivamente en 30 días.',
+                    )
                     router.replace('/auth')
                   },
                 },

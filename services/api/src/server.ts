@@ -5,6 +5,7 @@ import { env } from '@/config/env'
 import { registerPlugins } from '@/plugins'
 import { registerRoutes } from '@/modules'
 import { logger } from '@/config/logger'
+import { schedulePurgeDeletedAccounts } from '@/jobs/purgeDeletedAccounts'
 
 Sentry.init({
   dsn: env.SENTRY_DSN,
@@ -28,6 +29,7 @@ async function bootstrap() {
 
     await app.listen({ port: env.PORT, host: '0.0.0.0' })
     app.log.info(`Lunara API running on port ${env.PORT} [${env.NODE_ENV}]`)
+    schedulePurgeDeletedAccounts()
   } catch (err) {
     app.log.error(err)
     Sentry.captureException(err)

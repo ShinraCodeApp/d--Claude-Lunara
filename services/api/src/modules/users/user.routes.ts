@@ -127,13 +127,12 @@ export async function userRoutes(app: FastifyInstance) {
       reason: z.string().max(200).optional(),
     }).parse(req.body)
 
-    // Soft delete — hard delete scheduled after 30 days
+    // Se desactiva ya; el borrado definitivo lo hace jobs/purgeDeletedAccounts
+    // a los 30 días (por si la usuaria se arrepiente).
     await prisma.user.update({
       where: { id: req.currentUser.id },
       data: { deletedAt: new Date() },
     })
-
-    // TODO: Queue hard delete job after 30 days
 
     return reply.send({
       message: 'Tu cuenta ha sido marcada para eliminación. Se borrará permanentemente en 30 días.',
