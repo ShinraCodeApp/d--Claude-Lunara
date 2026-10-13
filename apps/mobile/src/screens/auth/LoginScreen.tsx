@@ -12,7 +12,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin'
 import { router } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 
-import apiClient from '@/api/client'
+import apiClient, { isServerAwake, wakeServer } from '@/api/client'
 import { useAuthStore, useSettingsStore } from '@/store'
 import { registerLocalAccount, loginLocalAccount } from '@/utils/localAuth'
 import { Colors, Typography, Spacing, BorderRadius } from '@/theme'
@@ -29,6 +29,19 @@ export default function LoginScreen() {
   const [firstName, setFirstName] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
+  const [waking, setWaking] = useState(false)
+
+  // Si el servidor está dormido (puede tardar ~100 s), espera mostrando un aviso
+  // para que la pantalla no parezca congelada.
+  const ensureServerReady = async () => {
+    if (isServerAwake()) return
+    setWaking(true)
+    try {
+      await wakeServer()
+    } finally {
+      setWaking(false)
+    }
+  }
 
   const applyLocalAccount = (account: ReturnType<typeof loginLocalAccount> extends { account: infer A } ? A : never, isNew: boolean) => {
     setToken(`local-token-${account.id}`)
@@ -77,6 +90,7 @@ export default function LoginScreen() {
   const authMutation = useMutation({
     mutationFn: async () => {
       // Try backend first; fall back to local auth if unreachable
+      await ensureServerReady()
       if (isLogin) {
         const { data } = await apiClient.post('/auth/login', { email, password })
         return { ...data, fromBackend: true }
@@ -115,6 +129,7 @@ export default function LoginScreen() {
       GoogleSignin.configure({ webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID })
       await GoogleSignin.hasPlayServices()
       const { idToken } = await GoogleSignin.signIn()
+      await ensureServerReady()
       const { data } = await apiClient.post('/auth/google', { idToken })
       return data
     },
@@ -244,6 +259,14 @@ export default function LoginScreen() {
               </Text>
             )}
 
+            {waking ? (
+              <View style={styles.infoBox}>
+                <Text style={styles.infoText}>
+                  🌙 Conectando con el servidor… la primera vez puede tardar hasta 2 minutos. No cierres la app.
+                </Text>
+              </View>
+            ) : null}
+
             {error ? (
               <View style={styles.errorBox}>
                 <Text style={styles.errorText}>⚠️ {error}</Text>
@@ -368,6 +391,11 @@ const styles = StyleSheet.create({
     padding: Spacing.md, borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)',
   },
   errorText: { color: '#fca5a5', fontSize: Typography.fontSize.sm, textAlign: 'center' },
+  infoBox: {
+    backgroundColor: 'rgba(167,139,250,0.15)', borderRadius: BorderRadius.lg,
+    padding: Spacing.md, borderWidth: 1, borderColor: 'rgba(167,139,250,0.3)',
+  },
+  infoText: { color: Colors.lavender[300], fontSize: Typography.fontSize.sm, textAlign: 'center' },
   mainBtn: { borderRadius: BorderRadius.xl, overflow: 'hidden' },
   mainBtnGradient: { paddingVertical: Spacing.md, alignItems: 'center' },
   mainBtnText: { color: '#fff', fontSize: Typography.fontSize.md, fontFamily: Typography.fontFamily.bold },

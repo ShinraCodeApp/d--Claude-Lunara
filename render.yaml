@@ -9,9 +9,11 @@ services:
     region: ohio # misma zona que Neon (AWS US East 2)
     rootDir: services/api
     # --no-workspaces: instala solo el servidor (sin la app movil ni la web del monorepo)
-    buildCommand: npm install --include=dev --no-workspaces && npm run build
-    # crea/actualiza las tablas, carga los datos iniciales y arranca
-    startCommand: npx prisma db push && npx prisma db seed && npm start
+    # el build ya hace `prisma db push` (ver "build" en services/api/package.json); el seed
+    # corre una sola vez por deploy y no en cada arranque, así el servidor despierta rápido
+    # (en el plan gratis se duerme y cada arranque corría db push + seed: ~100 s)
+    buildCommand: npm install --include=dev --no-workspaces && npm run build && npx prisma db seed
+    startCommand: npm start
     healthCheckPath: /api/v1/health
     autoDeploy: true
     envVars:

@@ -6,9 +6,52 @@ const storage = new MMKV({ id: 'lunara-store' })
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1'
 
-// El servidor (Render gratis) se duerme sin uso y tarda ~1 minuto en despertar:
-// lo despertamos apenas abre la app, así está listo cuando la usuaria inicia sesión.
-fetch(`${BASE_URL}/health`).catch(() => null)
+// El servidor (Render gratis) se duerme tras 15 min sin uso y tarda ~100 s en despertar,
+// más que el timeout de las peticiones. Lo despertamos al abrir la app y las pantallas
+// de login esperan a `wakeServer()` antes de enviar, mostrando un aviso mientras tanto.
+const AWAKE_TTL_MS = 10 * 60 * 1000
+const PING_TIMEOUT_MS = 40000
+let awakeUntil = 0
+let wakePromise: Promise<boolean> | null = null
+
+async function pingHealth(timeoutMs: number): Promise<boolean> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(`${BASE_URL}/health`, { signal: controller.signal })
+    return res.ok
+  } catch {
+    return false
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export function isServerAwake(): boolean {
+  return Date.now() < awakeUntil
+}
+
+export function wakeServer(maxWaitMs = 150000): Promise<boolean> {
+  if (isServerAwake()) return Promise.resolve(true)
+  if (!wakePromise) {
+    wakePromise = (async () => {
+      const deadline = Date.now() + maxWaitMs
+      while (Date.now() < deadline) {
+        if (await pingHealth(Math.min(PING_TIMEOUT_MS, deadline - Date.now()))) {
+          awakeUntil = Date.now() + AWAKE_TTL_MS
+          return true
+        }
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+      }
+      return false
+    })().finally(() => {
+      wakePromise = null
+    })
+  }
+  return wakePromise
+}
+
+wakeServer().catch(() => null)
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
